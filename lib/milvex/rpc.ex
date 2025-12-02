@@ -112,7 +112,7 @@ defmodule Milvex.RPC do
 
   A `Milvex.Error.t()` representing the status error.
   """
-  @spec status_to_error(Status.t() | nil, String.t()) :: Error.t()
+  @spec status_to_error(Status.t() | nil, String.t()) :: Grpc.t()
   def status_to_error(nil, operation) do
     Grpc.exception(
       operation: operation,
@@ -147,7 +147,7 @@ defmodule Milvex.RPC do
 
   A `Milvex.Error.t()` representing the gRPC error.
   """
-  @spec grpc_error_to_error(GRPC.RPCError.t(), String.t()) :: Error.t()
+  @spec grpc_error_to_error(GRPC.RPCError.t(), String.t()) :: Grpc.t()
   def grpc_error_to_error(%GRPC.RPCError{status: status, message: message}, operation) do
     Grpc.exception(
       operation: operation,
@@ -207,17 +207,17 @@ defmodule Milvex.RPC do
   defp connection_error(reason) do
     Connection.exception(
       reason: reason,
-      retriable: is_retriable_error?(reason)
+      retriable: retriable_error?(reason)
     )
   end
 
-  defp is_retriable_error?(:timeout), do: true
-  defp is_retriable_error?(:closed), do: true
-  defp is_retriable_error?(:econnrefused), do: true
-  defp is_retriable_error?(:econnreset), do: true
-  defp is_retriable_error?(:ehostunreach), do: true
-  defp is_retriable_error?(:enetunreach), do: true
-  defp is_retriable_error?(_), do: false
+  defp retriable_error?(:timeout), do: true
+  defp retriable_error?(:closed), do: true
+  defp retriable_error?(:econnrefused), do: true
+  defp retriable_error?(:econnreset), do: true
+  defp retriable_error?(:ehostunreach), do: true
+  defp retriable_error?(:enetunreach), do: true
+  defp retriable_error?(_), do: false
 
   defp build_message(reason, detail) when is_binary(reason) and reason != "" do
     if is_binary(detail) and detail != "" do

@@ -8,7 +8,7 @@ defmodule Milvex.ConfigTest do
       {:ok, config} = Config.parse([])
 
       assert config.host == "localhost"
-      assert config.port == 19530
+      assert config.port == 19_530
       assert config.database == "default"
       assert config.timeout == 30_000
       assert config.ssl == false
@@ -19,10 +19,10 @@ defmodule Milvex.ConfigTest do
     end
 
     test "parses custom host and port" do
-      {:ok, config} = Config.parse(host: "milvus.example.com", port: 19531)
+      {:ok, config} = Config.parse(host: "milvus.example.com", port: 19_531)
 
       assert config.host == "milvus.example.com"
-      assert config.port == 19531
+      assert config.port == 19_531
     end
 
     test "parses authentication options" do
@@ -49,7 +49,7 @@ defmodule Milvex.ConfigTest do
       {:error, error} = Config.parse(port: 0)
       assert error.message =~ "port"
 
-      {:error, error} = Config.parse(port: 70000)
+      {:error, error} = Config.parse(port: 70_000)
       assert error.message =~ "port"
     end
 
@@ -61,17 +61,17 @@ defmodule Milvex.ConfigTest do
 
   describe "parse/1 with map" do
     test "parses map config" do
-      {:ok, config} = Config.parse(%{host: "milvus.local", port: 19530})
+      {:ok, config} = Config.parse(%{host: "milvus.local", port: 19_530})
 
       assert config.host == "milvus.local"
-      assert config.port == 19530
+      assert config.port == 19_530
     end
 
     test "handles string keys" do
-      {:ok, config} = Config.parse(%{"host" => "milvus.local", "port" => 19530})
+      {:ok, config} = Config.parse(%{"host" => "milvus.local", "port" => 19_530})
 
       assert config.host == "milvus.local"
-      assert config.port == 19530
+      assert config.port == 19_530
     end
   end
 
@@ -80,7 +80,7 @@ defmodule Milvex.ConfigTest do
       {:ok, config} = Config.parse_uri("http://localhost:19530")
 
       assert config.host == "localhost"
-      assert config.port == 19530
+      assert config.port == 19_530
       assert config.ssl == false
     end
 
@@ -132,7 +132,7 @@ defmodule Milvex.ConfigTest do
 
       assert config.host == "localhost"
       # milvus scheme has no default, so we use our default
-      assert config.port == 19530
+      assert config.port == 19_530
     end
 
     test "returns error for invalid URI" do
@@ -168,7 +168,7 @@ defmodule Milvex.ConfigTest do
       {:ok, config} =
         Config.parse(
           host: "milvus.prod.example.com",
-          port: 19530,
+          port: 19_530,
           database: "production",
           user: "app_user",
           password: "secure_password",

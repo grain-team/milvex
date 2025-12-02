@@ -23,7 +23,7 @@ defmodule Milvex.ErrorTest do
 
   describe "Connection errors" do
     test "creates error with host and port" do
-      error = %Connection{reason: :timeout, host: "localhost", port: 19530}
+      error = %Connection{reason: :timeout, host: "localhost", port: 19_530}
       assert Connection.message(error) == "Connection failed to localhost:19530: timeout"
     end
 
@@ -33,7 +33,7 @@ defmodule Milvex.ErrorTest do
     end
 
     test "handles atom reasons" do
-      error = %Connection{reason: :econnrefused, host: "127.0.0.1", port: 19530}
+      error = %Connection{reason: :econnrefused, host: "127.0.0.1", port: 19_530}
       assert Connection.message(error) =~ "econnrefused"
     end
   end

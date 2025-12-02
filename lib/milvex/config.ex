@@ -8,7 +8,7 @@ defmodule Milvex.Config do
                      port:
                        Zoi.integer(description: "Milvus server port (1-65535)")
                        |> Zoi.min(1)
-                       |> Zoi.max(65535)
+                       |> Zoi.max(65_535)
                        |> Zoi.optional(),
                      database:
                        Zoi.string(description: "Database name to connect to")
@@ -43,7 +43,7 @@ defmodule Milvex.Config do
                    description: "Configuration options for connecting to a Milvus server",
                    example: %{
                      host: "localhost",
-                     port: 19530,
+                     port: 19_530,
                      database: "default",
                      timeout: 30_000
                    },
@@ -280,7 +280,7 @@ defmodule Milvex.Config do
   end
 
   defp apply_default_port(config) do
-    Map.put_new(config, :port, 19530)
+    Map.put_new(config, :port, 19_530)
   end
 
   @doc """

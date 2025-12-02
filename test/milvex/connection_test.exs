@@ -21,7 +21,7 @@ defmodule Milvex.ConnectionTest do
   describe "connection behavior without server" do
     @tag :integration
     test "attempting to connect to non-existent server" do
-      {:ok, conn} = Connection.start_link(host: "localhost", port: 19999)
+      {:ok, conn} = Connection.start_link(host: "localhost", port: 19_999)
 
       Process.sleep(100)
 
@@ -34,7 +34,7 @@ defmodule Milvex.ConnectionTest do
   describe "get_channel/1 when not connected" do
     @tag :integration
     test "returns error when not connected" do
-      {:ok, conn} = Connection.start_link(host: "localhost", port: 19999)
+      {:ok, conn} = Connection.start_link(host: "localhost", port: 19_999)
 
       Process.sleep(100)
 

@@ -80,7 +80,7 @@ defmodule Milvex.Connection do
 
   Returns `{:ok, channel}` if connected, or `{:error, error}` if not connected.
   """
-  @spec get_channel(GenStateMachine.server()) ::
+  @spec get_channel(GenServer.server()) ::
           {:ok, GRPC.Channel.t()} | {:error, Milvex.Error.t()}
   def get_channel(conn) do
     GenStateMachine.call(conn, :get_channel)
@@ -89,7 +89,7 @@ defmodule Milvex.Connection do
   @doc """
   Disconnects from the Milvus server and stops the connection process.
   """
-  @spec disconnect(GenStateMachine.server()) :: :ok
+  @spec disconnect(GenServer.server()) :: :ok
   def disconnect(conn) do
     GenStateMachine.stop(conn, :normal)
   end
@@ -99,7 +99,7 @@ defmodule Milvex.Connection do
 
   Returns `:ok` if the server is healthy, or `{:error, error}` otherwise.
   """
-  @spec health_check(GenStateMachine.server()) :: :ok | {:error, Milvex.Error.t()}
+  @spec health_check(GenServer.server()) :: :ok | {:error, Milvex.Error.t()}
   def health_check(conn) do
     GenStateMachine.call(conn, :health_check)
   end
@@ -107,7 +107,7 @@ defmodule Milvex.Connection do
   @doc """
   Checks if the connection is currently established.
   """
-  @spec connected?(GenStateMachine.server()) :: boolean()
+  @spec connected?(GenServer.server()) :: boolean()
   def connected?(conn) do
     GenStateMachine.call(conn, :connected?)
   end

@@ -1,0 +1,7 @@
+defmodule Milvex.Milvus.Proto.Milvus.GetQuerySegmentInfoRequest do
+  use Protobuf, protoc_gen_elixir_version: "0.15.0", syntax: :proto3
+
+  field :base, 1, type: Milvex.Milvus.Proto.Common.MsgBase
+  field :dbName, 2, type: :string
+  field :collectionName, 3, type: :string
+end

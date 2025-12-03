@@ -62,16 +62,6 @@ defmodule MilvexClientTest do
       assert {:error, error} = Milvex.has_collection(:conn, "test")
       assert Error.splode_error?(error)
     end
-
-    test "bang version raises on error" do
-      stub(Connection, :get_channel, fn _conn ->
-        {:error, Milvex.Errors.Connection.exception(reason: :not_connected)}
-      end)
-
-      assert_raise Milvex.Errors.Connection, fn ->
-        Milvex.has_collection!(:conn, "test")
-      end
-    end
   end
 
   describe "list_collections/2" do
@@ -708,16 +698,6 @@ defmodule MilvexClientTest do
 
       assert :ok = Milvex.drop_index(:conn, "test", "embedding", index_name: "my_index")
     end
-
-    test "bang version raises on error" do
-      stub(Connection, :get_channel, fn _conn ->
-        {:error, Milvex.Errors.Connection.exception(reason: :not_connected)}
-      end)
-
-      assert_raise Milvex.Errors.Connection, fn ->
-        Milvex.drop_index!(:conn, "test", "embedding")
-      end
-    end
   end
 
   describe "describe_index/3" do
@@ -748,20 +728,6 @@ defmodule MilvexClientTest do
       assert length(descriptions) == 1
       assert hd(descriptions).index_name == "my_index"
     end
-
-    test "bang version returns descriptions" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
-
-      stub(RPC, :call, fn _channel, _stub, :describe_index, _request ->
-        {:ok,
-         %DescribeIndexResponse{
-           status: %Status{code: 0},
-           index_descriptions: []
-         }}
-      end)
-
-      assert [] = Milvex.describe_index!(:conn, "test")
-    end
   end
 
   # ============================================================================
@@ -779,16 +745,6 @@ defmodule MilvexClientTest do
       end)
 
       assert :ok = Milvex.create_partition(:conn, "test", "partition_2024")
-    end
-
-    test "bang version raises on error" do
-      stub(Connection, :get_channel, fn _conn ->
-        {:error, Milvex.Errors.Connection.exception(reason: :not_connected)}
-      end)
-
-      assert_raise Milvex.Errors.Connection, fn ->
-        Milvex.create_partition!(:conn, "test", "partition")
-      end
     end
   end
 
@@ -837,16 +793,6 @@ defmodule MilvexClientTest do
 
       assert {:ok, false} = Milvex.has_partition(:conn, "test", "nonexistent")
     end
-
-    test "bang version returns boolean" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
-
-      stub(RPC, :call, fn _channel, _stub, :has_partition, _request ->
-        {:ok, %BoolResponse{status: %Status{code: 0}, value: true}}
-      end)
-
-      assert Milvex.has_partition!(:conn, "test", "partition") == true
-    end
   end
 
   describe "list_partitions/3" do
@@ -866,20 +812,6 @@ defmodule MilvexClientTest do
       assert {:ok, partitions} = Milvex.list_partitions(:conn, "test")
       assert "_default" in partitions
       assert "partition_2024" in partitions
-    end
-
-    test "bang version returns list" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
-
-      stub(RPC, :call, fn _channel, _stub, :show_partitions, _request ->
-        {:ok,
-         %ShowPartitionsResponse{
-           status: %Status{code: 0},
-           partition_names: ["_default"]
-         }}
-      end)
-
-      assert ["_default"] = Milvex.list_partitions!(:conn, "test")
     end
   end
 
@@ -911,16 +843,6 @@ defmodule MilvexClientTest do
                  replica_number: 3
                )
     end
-
-    test "bang version raises on error" do
-      stub(Connection, :get_channel, fn _conn ->
-        {:error, Milvex.Errors.Connection.exception(reason: :not_connected)}
-      end)
-
-      assert_raise Milvex.Errors.Connection, fn ->
-        Milvex.load_partitions!(:conn, "test", ["partition"])
-      end
-    end
   end
 
   describe "release_partitions/4" do
@@ -945,16 +867,6 @@ defmodule MilvexClientTest do
       end)
 
       assert :ok = Milvex.release_partitions(:conn, "test", ["partition_2024", "partition_2023"])
-    end
-
-    test "bang version raises on error" do
-      stub(Connection, :get_channel, fn _conn ->
-        {:error, Milvex.Errors.Connection.exception(reason: :not_connected)}
-      end)
-
-      assert_raise Milvex.Errors.Connection, fn ->
-        Milvex.release_partitions!(:conn, "test", ["partition"])
-      end
     end
   end
 end

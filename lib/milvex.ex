@@ -103,17 +103,6 @@ defmodule Milvex do
   end
 
   @doc """
-  Creates a collection and raises on error.
-  """
-  @spec create_collection!(GenServer.server(), String.t(), Schema.t(), keyword()) :: :ok
-  def create_collection!(conn, name, schema, opts \\ []) do
-    case create_collection(conn, name, schema, opts) do
-      :ok -> :ok
-      {:error, error} -> raise error
-    end
-  end
-
-  @doc """
   Drops (deletes) a collection.
 
   ## Parameters
@@ -142,17 +131,6 @@ defmodule Milvex do
       with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :drop_collection, request) do
         RPC.check_status(response, "DropCollection")
       end
-    end
-  end
-
-  @doc """
-  Drops a collection and raises on error.
-  """
-  @spec drop_collection!(GenServer.server(), String.t(), keyword()) :: :ok
-  def drop_collection!(conn, name, opts \\ []) do
-    case drop_collection(conn, name, opts) do
-      :ok -> :ok
-      {:error, error} -> raise error
     end
   end
 
@@ -188,17 +166,6 @@ defmodule Milvex do
            {:ok, resp} <- RPC.with_status_check(response, "HasCollection") do
         {:ok, resp.value}
       end
-    end
-  end
-
-  @doc """
-  Checks if a collection exists and raises on error.
-  """
-  @spec has_collection!(GenServer.server(), String.t(), keyword()) :: boolean()
-  def has_collection!(conn, name, opts \\ []) do
-    case has_collection(conn, name, opts) do
-      {:ok, result} -> result
-      {:error, error} -> raise error
     end
   end
 
@@ -251,17 +218,6 @@ defmodule Milvex do
   end
 
   @doc """
-  Describes a collection and raises on error.
-  """
-  @spec describe_collection!(GenServer.server(), String.t(), keyword()) :: map()
-  def describe_collection!(conn, name, opts \\ []) do
-    case describe_collection(conn, name, opts) do
-      {:ok, result} -> result
-      {:error, error} -> raise error
-    end
-  end
-
-  @doc """
   Lists all collections in the database.
 
   ## Parameters
@@ -290,17 +246,6 @@ defmodule Milvex do
            {:ok, resp} <- RPC.with_status_check(response, "ShowCollections") do
         {:ok, resp.collection_names}
       end
-    end
-  end
-
-  @doc """
-  Lists all collections and raises on error.
-  """
-  @spec list_collections!(GenServer.server(), keyword()) :: [String.t()]
-  def list_collections!(conn, opts \\ []) do
-    case list_collections(conn, opts) do
-      {:ok, result} -> result
-      {:error, error} -> raise error
     end
   end
 
@@ -339,17 +284,6 @@ defmodule Milvex do
   end
 
   @doc """
-  Loads a collection and raises on error.
-  """
-  @spec load_collection!(GenServer.server(), String.t(), keyword()) :: :ok
-  def load_collection!(conn, name, opts \\ []) do
-    case load_collection(conn, name, opts) do
-      :ok -> :ok
-      {:error, error} -> raise error
-    end
-  end
-
-  @doc """
   Releases a collection from memory.
 
   ## Parameters
@@ -378,17 +312,6 @@ defmodule Milvex do
       with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :release_collection, request) do
         RPC.check_status(response, "ReleaseCollection")
       end
-    end
-  end
-
-  @doc """
-  Releases a collection and raises on error.
-  """
-  @spec release_collection!(GenServer.server(), String.t(), keyword()) :: :ok
-  def release_collection!(conn, name, opts \\ []) do
-    case release_collection(conn, name, opts) do
-      :ok -> :ok
-      {:error, error} -> raise error
     end
   end
 
@@ -471,17 +394,6 @@ defmodule Milvex do
   end
 
   @doc """
-  Creates an index and raises on error.
-  """
-  @spec create_index!(GenServer.server(), String.t(), Index.t() | String.t(), keyword()) :: :ok
-  def create_index!(conn, collection, index_or_field, opts \\ []) do
-    case create_index(conn, collection, index_or_field, opts) do
-      :ok -> :ok
-      {:error, error} -> raise error
-    end
-  end
-
-  @doc """
   Drops an index from a collection.
 
   ## Parameters
@@ -524,17 +436,6 @@ defmodule Milvex do
   end
 
   @doc """
-  Drops an index and raises on error.
-  """
-  @spec drop_index!(GenServer.server(), String.t(), String.t(), keyword()) :: :ok
-  def drop_index!(conn, collection, field_name, opts \\ []) do
-    case drop_index(conn, collection, field_name, opts) do
-      :ok -> :ok
-      {:error, error} -> raise error
-    end
-  end
-
-  @doc """
   Describes an index on a collection.
 
   ## Parameters
@@ -569,17 +470,6 @@ defmodule Milvex do
            {:ok, resp} <- RPC.with_status_check(response, "DescribeIndex") do
         {:ok, resp.index_descriptions}
       end
-    end
-  end
-
-  @doc """
-  Describes an index and raises on error.
-  """
-  @spec describe_index!(GenServer.server(), String.t(), keyword()) :: list()
-  def describe_index!(conn, collection, opts \\ []) do
-    case describe_index(conn, collection, opts) do
-      {:ok, result} -> result
-      {:error, error} -> raise error
     end
   end
 
@@ -672,20 +562,6 @@ defmodule Milvex do
   end
 
   @doc """
-  Inserts data and raises on error.
-  """
-  @spec insert!(GenServer.server(), String.t(), Data.t() | [map()], keyword()) :: %{
-          insert_count: integer(),
-          ids: list()
-        }
-  def insert!(conn, collection, data, opts \\ []) do
-    case insert(conn, collection, data, opts) do
-      {:ok, result} -> result
-      {:error, error} -> raise error
-    end
-  end
-
-  @doc """
   Deletes entities from a collection by filter expression.
 
   ## Parameters
@@ -726,19 +602,6 @@ defmodule Milvex do
            {:ok, resp} <- RPC.with_status_check(response, "Delete") do
         {:ok, %{delete_count: resp.delete_cnt}}
       end
-    end
-  end
-
-  @doc """
-  Deletes entities and raises on error.
-  """
-  @spec delete!(GenServer.server(), String.t(), String.t(), keyword()) :: %{
-          delete_count: integer()
-        }
-  def delete!(conn, collection, expr, opts \\ []) do
-    case delete(conn, collection, expr, opts) do
-      {:ok, result} -> result
-      {:error, error} -> raise error
     end
   end
 
@@ -785,20 +648,6 @@ defmodule Milvex do
            ids: extract_ids(resp."IDs")
          }}
       end
-    end
-  end
-
-  @doc """
-  Upserts data and raises on error.
-  """
-  @spec upsert!(GenServer.server(), String.t(), Data.t() | [map()], keyword()) :: %{
-          upsert_count: integer(),
-          ids: list()
-        }
-  def upsert!(conn, collection, data, opts \\ []) do
-    case upsert(conn, collection, data, opts) do
-      {:ok, result} -> result
-      {:error, error} -> raise error
     end
   end
 
@@ -851,17 +700,6 @@ defmodule Milvex do
            {:ok, resp} <- RPC.with_status_check(response, "Query") do
         {:ok, QueryResult.from_proto(resp)}
       end
-    end
-  end
-
-  @doc """
-  Queries entities and raises on error.
-  """
-  @spec query!(GenServer.server(), String.t(), String.t(), keyword()) :: QueryResult.t()
-  def query!(conn, collection, expr, opts \\ []) do
-    case query(conn, collection, expr, opts) do
-      {:ok, result} -> result
-      {:error, error} -> raise error
     end
   end
 
@@ -935,17 +773,6 @@ defmodule Milvex do
     end
   end
 
-  @doc """
-  Searches for similar vectors and raises on error.
-  """
-  @spec search!(GenServer.server(), String.t(), [[number()]], keyword()) :: SearchResult.t()
-  def search!(conn, collection, vectors, opts \\ []) do
-    case search(conn, collection, vectors, opts) do
-      {:ok, result} -> result
-      {:error, error} -> raise error
-    end
-  end
-
   # ============================================================================
   # Partition Operations
   # ============================================================================
@@ -990,17 +817,6 @@ defmodule Milvex do
   end
 
   @doc """
-  Creates a partition and raises on error.
-  """
-  @spec create_partition!(GenServer.server(), String.t(), String.t(), keyword()) :: :ok
-  def create_partition!(conn, collection, partition_name, opts \\ []) do
-    case create_partition(conn, collection, partition_name, opts) do
-      :ok -> :ok
-      {:error, error} -> raise error
-    end
-  end
-
-  @doc """
   Drops a partition from a collection.
 
   ## Parameters
@@ -1036,17 +852,6 @@ defmodule Milvex do
       with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :drop_partition, request) do
         RPC.check_status(response, "DropPartition")
       end
-    end
-  end
-
-  @doc """
-  Drops a partition and raises on error.
-  """
-  @spec drop_partition!(GenServer.server(), String.t(), String.t(), keyword()) :: :ok
-  def drop_partition!(conn, collection, partition_name, opts \\ []) do
-    case drop_partition(conn, collection, partition_name, opts) do
-      :ok -> :ok
-      {:error, error} -> raise error
     end
   end
 
@@ -1092,17 +897,6 @@ defmodule Milvex do
   end
 
   @doc """
-  Checks if a partition exists and raises on error.
-  """
-  @spec has_partition!(GenServer.server(), String.t(), String.t(), keyword()) :: boolean()
-  def has_partition!(conn, collection, partition_name, opts \\ []) do
-    case has_partition(conn, collection, partition_name, opts) do
-      {:ok, result} -> result
-      {:error, error} -> raise error
-    end
-  end
-
-  @doc """
   Lists all partitions in a collection.
 
   ## Parameters
@@ -1137,17 +931,6 @@ defmodule Milvex do
            {:ok, resp} <- RPC.with_status_check(response, "ShowPartitions") do
         {:ok, resp.partition_names}
       end
-    end
-  end
-
-  @doc """
-  Lists all partitions and raises on error.
-  """
-  @spec list_partitions!(GenServer.server(), String.t(), keyword()) :: [String.t()]
-  def list_partitions!(conn, collection, opts \\ []) do
-    case list_partitions(conn, collection, opts) do
-      {:ok, result} -> result
-      {:error, error} -> raise error
     end
   end
 
@@ -1193,17 +976,6 @@ defmodule Milvex do
   end
 
   @doc """
-  Loads partitions and raises on error.
-  """
-  @spec load_partitions!(GenServer.server(), String.t(), [String.t()], keyword()) :: :ok
-  def load_partitions!(conn, collection, partition_names, opts \\ []) do
-    case load_partitions(conn, collection, partition_names, opts) do
-      :ok -> :ok
-      {:error, error} -> raise error
-    end
-  end
-
-  @doc """
   Releases partitions from memory.
 
   ## Parameters
@@ -1239,17 +1011,6 @@ defmodule Milvex do
       with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :release_partitions, request) do
         RPC.check_status(response, "ReleasePartitions")
       end
-    end
-  end
-
-  @doc """
-  Releases partitions and raises on error.
-  """
-  @spec release_partitions!(GenServer.server(), String.t(), [String.t()], keyword()) :: :ok
-  def release_partitions!(conn, collection, partition_names, opts \\ []) do
-    case release_partitions(conn, collection, partition_names, opts) do
-      :ok -> :ok
-      {:error, error} -> raise error
     end
   end
 

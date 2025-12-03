@@ -21,6 +21,14 @@ defmodule Milvex.MixProject do
         "coveralls.html": :test,
         "coveralls.cobertura": :test
       ],
+      docs: [
+        main: "readme",
+        extras: [
+          "CHANGELOG.md": [title: "Changelog"],
+          "README.md": [title: "Introduction"],
+          LICENSE: [title: "License"]
+        ]
+      ],
       deps: deps(),
       aliases: aliases()
     ]

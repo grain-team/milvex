@@ -1,7 +1,6 @@
 defmodule Milvex do
-  @moduledoc """
-  High-level client API for Milvus vector database.
-  """
+  @external_resource "README.md"
+  @moduledoc File.read!("README.md")
 
   alias Milvex.Connection
   alias Milvex.Data

@@ -362,3 +362,44 @@ defmodule Milvex.Connection do
     Process.send_after(self(), :health_check, @health_check_interval)
   end
 end
+
+defimpl Inspect, for: Milvex.Connection do
+  import Inspect.Algebra
+
+  @redacted_keys [:token, :user, :password]
+  @redacted_headers ["authorization"]
+
+  def inspect(%Milvex.Connection{} = conn, opts) do
+    redacted = %{
+      conn
+      | config: redact_config(conn.config),
+        channel: redact_channel(conn.channel)
+    }
+
+    concat(["#Milvex.Connection<", to_doc(Map.from_struct(redacted), opts), ">"])
+  end
+
+  defp redact_config(nil), do: nil
+
+  defp redact_config(config) when is_map(config) do
+    Map.new(config, fn
+      {key, _value} when key in @redacted_keys -> {key, "[REDACTED]"}
+      {key, value} -> {key, value}
+    end)
+  end
+
+  defp redact_channel(nil), do: nil
+
+  defp redact_channel(%GRPC.Channel{} = channel) do
+    %{channel | headers: redact_headers(channel.headers)}
+  end
+
+  defp redact_headers(headers) when is_list(headers) do
+    Enum.map(headers, fn
+      {key, _value} when key in @redacted_headers -> {key, "[REDACTED]"}
+      header -> header
+    end)
+  end
+
+  defp redact_headers(headers), do: headers
+end

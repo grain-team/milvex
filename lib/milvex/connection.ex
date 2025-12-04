@@ -52,6 +52,7 @@ defmodule Milvex.Connection do
 
   alias Milvex.Backoff
   alias Milvex.Config
+  alias Milvex.Errors
   alias Milvex.Milvus.Proto.Milvus.CheckHealthRequest
   alias Milvex.Milvus.Proto.Milvus.MilvusService
 
@@ -290,7 +291,7 @@ defmodule Milvex.Connection do
 
   defp not_connected_error(data) do
     {:error,
-     Milvex.Errors.Connection.exception(
+     Errors.Connection.exception(
        reason: :not_connected,
        host: data.config.host,
        port: data.config.port,
@@ -302,13 +303,15 @@ defmodule Milvex.Connection do
     address = "#{config.host}:#{config.port}"
     opts = build_connection_opts(config)
 
+    Logger.info("Establishing connection to Milvus at #{address}...")
+
     case GRPC.Stub.connect(address, opts) do
       {:ok, channel} ->
         {:ok, channel}
 
       {:error, reason} ->
         {:error,
-         Milvex.Errors.Connection.exception(
+         Errors.Connection.exception(
            reason: reason,
            host: config.host,
            port: config.port,
@@ -362,7 +365,7 @@ defmodule Milvex.Connection do
           :ok
         else
           {:error,
-           Milvex.Errors.Grpc.exception(
+           Errors.Grpc.exception(
              operation: "CheckHealth",
              code: :unhealthy,
              message: "Server reported unhealthy status"
@@ -371,7 +374,7 @@ defmodule Milvex.Connection do
 
       {:error, %GRPC.RPCError{} = error} ->
         {:error,
-         Milvex.Errors.Grpc.exception(
+         Errors.Grpc.exception(
            operation: "CheckHealth",
            code: error.status,
            message: error.message || "Health check failed"
@@ -379,7 +382,7 @@ defmodule Milvex.Connection do
 
       {:error, reason} ->
         {:error,
-         Milvex.Errors.Connection.exception(
+         Errors.Connection.exception(
            reason: reason,
            retriable: true
          )}

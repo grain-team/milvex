@@ -37,12 +37,7 @@ defmodule Milvex.Backoff do
           float(),
           float()
         ) :: pos_integer()
-  def calculate(attempt, base_delay, max_delay, multiplier \\ 2.0, jitter \\ 0.1)
-      when is_integer(attempt) and attempt >= 0 and
-             is_integer(base_delay) and base_delay > 0 and
-             is_integer(max_delay) and max_delay > 0 and
-             is_float(multiplier) and multiplier >= 1.0 and
-             is_float(jitter) and jitter >= 0.0 and jitter <= 1.0 do
+  def calculate(attempt, base_delay, max_delay, multiplier \\ 2.0, jitter \\ 0.1) do
     delay = base_delay * :math.pow(multiplier, attempt)
     capped_delay = min(delay, max_delay)
 

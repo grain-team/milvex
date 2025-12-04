@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.0](https://github.com/ycastorium/milvex/compare/v0.1.0...v0.2.0) (2025-12-04)
+
+
+### Features
+
+* Implements Collection DSL using Spark ([96c00ad](https://github.com/ycastorium/milvex/commit/96c00ad36acfd4d7e1b0ce10f5c211e3ff6ff6bc))
+* Integrate collection types into the api ([e501145](https://github.com/ycastorium/milvex/commit/e501145181098d09e0464bdd2ef3f596081dcafa))
+
 ## 0.1.0 (2025-12-04)
 
 

@@ -38,6 +38,38 @@ defmodule Milvex.Integration.MigrationTest do
       {:ok, [_ | _] = descriptions} = Milvex.describe_index(conn, name)
       assert Enum.any?(descriptions, &(&1.field_name == "embedding"))
     end
+
+    test "handles 'index not found' error gracefully when creating index", %{conn: conn} do
+      name = unique_collection_name("migrate_no_idx")
+      schema = standard_schema(name)
+
+      on_exit(fn -> cleanup_collection(conn, name) end)
+
+      # Create collection without any index
+      :ok = Milvex.create_collection(conn, name, schema)
+
+      # Verify describe_index returns error for non-existent index
+      result = Milvex.describe_index(conn, name, field_name: "embedding")
+
+      # Should be either an error (index not found) or empty list
+      case result do
+        {:error, %Milvex.Errors.Grpc{} = error} ->
+          # This is the expected "index not found" error
+          assert error.message =~ "index not found" or error.code == 700
+
+        {:ok, []} ->
+          # Some Milvus versions return empty list instead of error
+          assert true
+      end
+
+      # Now create the index - this simulates what migration does after handling the error
+      index = Index.hnsw("embedding", :cosine, m: 8, ef_construction: 64)
+      assert :ok = Milvex.create_index(conn, name, index)
+
+      # Verify index was created
+      {:ok, [_ | _] = descriptions} = Milvex.describe_index(conn, name)
+      assert Enum.any?(descriptions, &(&1.field_name == "embedding"))
+    end
   end
 
   describe "migrate!/3 - existing collection" do

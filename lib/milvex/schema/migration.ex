@@ -242,9 +242,25 @@ defmodule Milvex.Schema.Migration do
            collection_name,
            Keyword.put(opts, :field_name, field_name)
          ) do
-      {:ok, [index_desc | _]} -> {:ok, index_desc}
-      {:ok, []} -> {:ok, nil}
-      {:error, reason} -> {:error, reason}
+      {:ok, [index_desc | _]} ->
+        {:ok, index_desc}
+
+      {:ok, []} ->
+        {:ok, nil}
+
+      {:error, %{code: 700}} ->
+        # Index not found - treat as no index exists
+        {:ok, nil}
+
+      {:error, %{message: msg}} when is_binary(msg) ->
+        if String.contains?(msg, "index not found") do
+          {:ok, nil}
+        else
+          {:error, msg}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

@@ -94,10 +94,26 @@ defmodule Milvex.Collection do
 
   @doc """
   Returns the collection name for the given module.
+
+  If a prefix is configured, it will be prepended to the base name.
+  Function prefixes are evaluated at call time.
   """
   @spec collection_name(module()) :: String.t()
   def collection_name(module) do
-    Spark.Dsl.Extension.get_opt(module, [:collection], :name, nil)
+    name = Spark.Dsl.Extension.get_opt(module, [:collection], :name, nil)
+
+    case resolve_prefix(module) do
+      nil -> name
+      prefix -> prefix <> name
+    end
+  end
+
+  defp resolve_prefix(module) do
+    case Spark.Dsl.Extension.get_opt(module, [:collection], :prefix, nil) do
+      nil -> nil
+      prefix when is_binary(prefix) -> prefix
+      prefix when is_function(prefix, 0) -> prefix.()
+    end
   end
 
   @doc """
@@ -114,6 +130,17 @@ defmodule Milvex.Collection do
   @spec enable_dynamic_field?(module()) :: boolean()
   def enable_dynamic_field?(module) do
     Spark.Dsl.Extension.get_opt(module, [:collection], :enable_dynamic_field, false)
+  end
+
+  @doc """
+  Returns the raw prefix configuration for the given module.
+
+  Returns the prefix as configured: a string, a 0-arity function, or nil if not set.
+  Use `collection_name/1` to get the resolved collection name with prefix applied.
+  """
+  @spec prefix(module()) :: String.t() | (-> String.t()) | nil
+  def prefix(module) do
+    Spark.Dsl.Extension.get_opt(module, [:collection], :prefix, nil)
   end
 
   @doc """

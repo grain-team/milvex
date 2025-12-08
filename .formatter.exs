@@ -16,7 +16,8 @@ spark_locals_without_parens = [
   array: 4,
   name: 1,
   description: 1,
-  enable_dynamic_field: 1
+  enable_dynamic_field: 1,
+  prefix: 1
 ]
 
 [

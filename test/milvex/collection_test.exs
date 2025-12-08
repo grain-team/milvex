@@ -265,4 +265,67 @@ defmodule Milvex.CollectionTest do
       refute Field.array?(%Field{element_type: nil})
     end
   end
+
+  defmodule StringPrefixCollection do
+    use Milvex.Collection
+
+    collection do
+      name "items"
+      prefix("prod_")
+
+      fields do
+        primary_key :id, :int64, auto_id: true
+        vector :embedding, 128
+      end
+    end
+  end
+
+  defmodule FunctionPrefixCollection do
+    use Milvex.Collection
+
+    collection do
+      name "items"
+      prefix(fn -> "dynamic_" end)
+
+      fields do
+        primary_key :id, :int64, auto_id: true
+        vector :embedding, 128
+      end
+    end
+  end
+
+  describe "collection prefix" do
+    test "collection without prefix returns base name" do
+      assert Collection.collection_name(BasicCollection) == "test_collection"
+      assert Collection.prefix(BasicCollection) == nil
+    end
+
+    test "collection with string prefix returns prefixed name" do
+      assert Collection.collection_name(StringPrefixCollection) == "prod_items"
+    end
+
+    test "prefix/1 returns raw string prefix" do
+      assert Collection.prefix(StringPrefixCollection) == "prod_"
+    end
+
+    test "collection with function prefix returns prefixed name" do
+      assert Collection.collection_name(FunctionPrefixCollection) == "dynamic_items"
+    end
+
+    test "prefix/1 returns raw function prefix" do
+      prefix = Collection.prefix(FunctionPrefixCollection)
+      assert is_function(prefix, 0)
+      assert prefix.() == "dynamic_"
+    end
+
+    test "to_schema/1 uses prefixed collection name" do
+      schema = Collection.to_schema(StringPrefixCollection)
+      assert schema.name == "prod_items"
+    end
+
+    test "to_proto/1 uses prefixed collection name" do
+      proto = Collection.to_proto(StringPrefixCollection)
+      assert proto.name == "prod_items"
+    end
+  end
 end

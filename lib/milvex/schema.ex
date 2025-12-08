@@ -287,8 +287,12 @@ defmodule Milvex.Schema do
 
   @doc """
   Creates a Schema from a protobuf CollectionSchema struct.
+
+  Returns `nil` if the input is `nil`.
   """
-  @spec from_proto(CollectionSchema.t()) :: t()
+  @spec from_proto(CollectionSchema.t() | nil) :: t() | nil
+  def from_proto(nil), do: nil
+
   def from_proto(%CollectionSchema{} = proto) do
     %__MODULE__{
       name: proto.name,

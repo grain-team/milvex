@@ -378,6 +378,11 @@ defmodule Milvex.Collection.Dsl do
         type: :boolean,
         default: false,
         doc: "Enable storage of fields not defined in the schema"
+      ],
+      prefix: [
+        type: {:or, [:string, {:fun, 0}]},
+        doc:
+          "Optional prefix for the collection name. Can be a string or a 0-arity function returning a string."
       ]
     ],
     sections: [@fields]

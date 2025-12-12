@@ -47,10 +47,13 @@ defmodule Milvex.SearchResult do
     defstruct [:id, :score, :distance, :fields]
   end
 
+  @type hits_list :: [[Hit.t()]]
+  @type hits_map :: %{atom() => [Hit.t()]}
+
   @type t :: %__MODULE__{
           num_queries: non_neg_integer(),
           top_k: non_neg_integer(),
-          hits: [[Hit.t()]],
+          hits: hits_list() | hits_map(),
           collection_name: String.t()
         }
 
@@ -89,22 +92,41 @@ defmodule Milvex.SearchResult do
   Returns the total number of hits across all queries.
   """
   @spec total_hits(t()) :: non_neg_integer()
+  def total_hits(%__MODULE__{hits: hits}) when is_map(hits) do
+    hits |> Map.values() |> List.flatten() |> length()
+  end
+
   def total_hits(%__MODULE__{hits: hits}) do
     hits |> List.flatten() |> length()
   end
 
   @doc """
-  Returns the hits for a specific query (0-indexed).
+  Returns the hits for a specific query.
+
+  For list-based results, pass a 0-indexed integer.
+  For keyed results, pass the atom key used in the search.
   """
-  @spec get_query_hits(t(), non_neg_integer()) :: [Hit.t()]
-  def get_query_hits(%__MODULE__{hits: hits}, query_index) when query_index >= 0 do
+  @spec get_query_hits(t(), non_neg_integer() | atom()) :: [Hit.t()]
+  def get_query_hits(%__MODULE__{hits: hits}, key) when is_map(hits) and is_atom(key) do
+    Map.get(hits, key, [])
+  end
+
+  def get_query_hits(%__MODULE__{hits: hits}, query_index)
+      when is_integer(query_index) and query_index >= 0 do
     Enum.at(hits, query_index, [])
   end
 
   @doc """
   Returns the top hit for each query.
+
+  For list-based results, returns a list of top hits.
+  For keyed results, returns a map with the same keys.
   """
-  @spec top_hits(t()) :: [Hit.t() | nil]
+  @spec top_hits(t()) :: [Hit.t() | nil] | %{atom() => Hit.t() | nil}
+  def top_hits(%__MODULE__{hits: hits}) when is_map(hits) do
+    Map.new(hits, fn {key, hit_list} -> {key, List.first(hit_list)} end)
+  end
+
   def top_hits(%__MODULE__{hits: hits}) do
     Enum.map(hits, &List.first/1)
   end
@@ -113,6 +135,10 @@ defmodule Milvex.SearchResult do
   Checks if the result is empty.
   """
   @spec empty?(t()) :: boolean()
+  def empty?(%__MODULE__{hits: hits}) when is_map(hits) do
+    hits == %{} or Enum.all?(Map.values(hits), &(&1 == []))
+  end
+
   def empty?(%__MODULE__{hits: hits}), do: hits == [] or Enum.all?(hits, &(&1 == []))
 
   defp build_hits(%SearchResultData{} = data) do

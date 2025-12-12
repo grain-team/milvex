@@ -715,6 +715,11 @@ defmodule Milvex do
     end
   end
 
+  @typedoc """
+  Query vectors for search. Either a list of vectors (positional) or a map with atom keys (keyed).
+  """
+  @type vector_queries :: [[number()]] | %{atom() => [number()]}
+
   @doc """
   Searches for similar vectors in a collection.
 
@@ -722,7 +727,7 @@ defmodule Milvex do
 
     - `conn` - Connection process
     - `collection` - Collection name
-    - `vectors` - List of query vectors (2D list of floats)
+    - `vectors` - Query vectors: list of vectors or map with atom keys
     - `opts` - Options (`:vector_field` is required)
 
   ## Options
@@ -756,10 +761,31 @@ defmodule Milvex do
         top_k: 5,
         filter: "year > 2020"
       )
+
+      # Named queries - results keyed by same atoms
+      {:ok, result} = Milvex.search(conn, "movies",
+        %{matrix_like: embedding1, inception_like: embedding2},
+        vector_field: "embedding",
+        top_k: 5
+      )
+      result.hits[:matrix_like]     # => [%Hit{}, ...]
+      result.hits[:inception_like]  # => [%Hit{}, ...]
   """
-  @spec search(GenServer.server(), collection_ref(), [[number()]], keyword()) ::
+  @spec search(GenServer.server(), collection_ref(), vector_queries(), keyword()) ::
           {:ok, SearchResult.t()} | {:error, Error.t()}
-  def search(conn, collection, vectors, opts \\ []) do
+  def search(conn, collection, vectors, opts \\ [])
+
+  def search(conn, collection, vectors, opts) when is_map(vectors) and not is_struct(vectors) do
+    keys = Map.keys(vectors)
+    vectors_list = Enum.map(keys, &Map.get(vectors, &1))
+
+    with {:ok, result} <- search(conn, collection, vectors_list, opts) do
+      keyed_hits = Enum.zip(keys, result.hits) |> Map.new()
+      {:ok, %{result | hits: keyed_hits}}
+    end
+  end
+
+  def search(conn, collection, vectors, opts) when is_list(vectors) do
     collection_name = resolve_collection_name(collection)
 
     with {:ok, vector_field} <- require_option(opts, :vector_field),

@@ -412,4 +412,101 @@ defmodule Milvex.SearchResultTest do
       assert hit.fields["title"] == "Test"
     end
   end
+
+  describe "keyed results" do
+    setup do
+      hit1 = %Hit{id: 1, score: 0.9, distance: nil, fields: %{}}
+      hit2 = %Hit{id: 2, score: 0.8, distance: nil, fields: %{}}
+      hit3 = %Hit{id: 10, score: 0.95, distance: nil, fields: %{}}
+      hit4 = %Hit{id: 20, score: 0.85, distance: nil, fields: %{}}
+
+      keyed_result = %SearchResult{
+        num_queries: 2,
+        top_k: 2,
+        hits: %{query_a: [hit1, hit2], query_b: [hit3, hit4]},
+        collection_name: "test"
+      }
+
+      {:ok, keyed_result: keyed_result, hit1: hit1, hit3: hit3}
+    end
+
+    test "total_hits/1 counts hits in keyed results", %{keyed_result: result} do
+      assert SearchResult.total_hits(result) == 4
+    end
+
+    test "total_hits/1 returns 0 for empty keyed results" do
+      result = %SearchResult{
+        num_queries: 0,
+        top_k: 2,
+        hits: %{},
+        collection_name: "test"
+      }
+
+      assert SearchResult.total_hits(result) == 0
+    end
+
+    test "get_query_hits/2 accepts atom keys", %{keyed_result: result} do
+      hits_a = SearchResult.get_query_hits(result, :query_a)
+      assert length(hits_a) == 2
+      assert Enum.map(hits_a, & &1.id) == [1, 2]
+
+      hits_b = SearchResult.get_query_hits(result, :query_b)
+      assert Enum.map(hits_b, & &1.id) == [10, 20]
+    end
+
+    test "get_query_hits/2 returns empty list for missing key", %{keyed_result: result} do
+      assert SearchResult.get_query_hits(result, :nonexistent) == []
+    end
+
+    test "top_hits/1 returns map for keyed results", %{
+      keyed_result: result,
+      hit1: hit1,
+      hit3: hit3
+    } do
+      top = SearchResult.top_hits(result)
+
+      assert is_map(top)
+      assert top[:query_a] == hit1
+      assert top[:query_b] == hit3
+    end
+
+    test "top_hits/1 returns nil for empty query groups in keyed results" do
+      result = %SearchResult{
+        num_queries: 2,
+        top_k: 2,
+        hits: %{has_hits: [%Hit{id: 1, score: 0.9, distance: nil, fields: %{}}], empty: []},
+        collection_name: "test"
+      }
+
+      top = SearchResult.top_hits(result)
+      assert top[:has_hits].id == 1
+      assert top[:empty] == nil
+    end
+
+    test "empty?/1 returns true for empty keyed results" do
+      result = %SearchResult{
+        num_queries: 0,
+        top_k: 2,
+        hits: %{},
+        collection_name: "test"
+      }
+
+      assert SearchResult.empty?(result)
+    end
+
+    test "empty?/1 returns true when all keyed groups are empty" do
+      result = %SearchResult{
+        num_queries: 2,
+        top_k: 2,
+        hits: %{query_a: [], query_b: []},
+        collection_name: "test"
+      }
+
+      assert SearchResult.empty?(result)
+    end
+
+    test "empty?/1 returns false when keyed results have hits", %{keyed_result: result} do
+      refute SearchResult.empty?(result)
+    end
+  end
 end

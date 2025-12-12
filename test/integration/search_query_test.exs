@@ -110,6 +110,40 @@ defmodule Milvex.Integration.SearchQueryTest do
       end)
     end
 
+    test "preserves query order in results for list-based search", %{
+      conn: conn,
+      collection_name: name
+    } do
+      # Query vectors are orthogonal - each should match a specific movie
+      # [1,0,0,0] -> The Matrix, [0,1,0,0] -> Inception, [0,0,0,1] -> Avatar
+      query_vectors = [
+        [0.0, 0.0, 0.0, 1.0],
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0]
+      ]
+
+      get_title = fn hit ->
+        Map.get(hit.fields, "title") || Map.get(hit.fields, :title)
+      end
+
+      assert_eventually(fn ->
+        with {:ok, result} <-
+               Milvex.search(conn, name, query_vectors,
+                 vector_field: "embedding",
+                 top_k: 1,
+                 output_fields: ["title"]
+               ),
+             [[hit0 | _], [hit1 | _], [hit2 | _]] <- result.hits do
+          # Results must be in same order as input queries
+          get_title.(hit0) == "Avatar" and
+            get_title.(hit1) == "The Matrix" and
+            get_title.(hit2) == "Inception"
+        else
+          _ -> false
+        end
+      end)
+    end
+
     test "fails without vector_field option", %{conn: conn, collection_name: name} do
       query_vector = [1.0, 0.0, 0.0, 0.0]
 
@@ -140,6 +174,52 @@ defmodule Milvex.Integration.SearchQueryTest do
                )
 
       assert %Milvex.Errors.Grpc{} = error
+    end
+
+    test "accepts keyed vectors and returns keyed results", %{conn: conn, collection_name: name} do
+      queries = %{
+        matrix_like: [1.0, 0.0, 0.0, 0.0],
+        inception_like: [0.0, 1.0, 0.0, 0.0]
+      }
+
+      assert_eventually(fn ->
+        case Milvex.search(conn, name, queries, vector_field: "embedding", top_k: 3) do
+          {:ok, result} ->
+            is_map(result.hits) and
+              Map.has_key?(result.hits, :matrix_like) and
+              Map.has_key?(result.hits, :inception_like) and
+              not Enum.empty?(result.hits[:matrix_like])
+
+          _ ->
+            false
+        end
+      end)
+    end
+
+    test "keyed search preserves key-result correspondence", %{conn: conn, collection_name: name} do
+      queries = %{
+        find_matrix: [1.0, 0.0, 0.0, 0.0],
+        find_avatar: [0.0, 0.0, 0.0, 1.0]
+      }
+
+      get_title = fn hit ->
+        Map.get(hit.fields, "title") || Map.get(hit.fields, :title)
+      end
+
+      assert_eventually(fn ->
+        with {:ok, result} <-
+               Milvex.search(conn, name, queries,
+                 vector_field: "embedding",
+                 top_k: 1,
+                 output_fields: ["title"]
+               ),
+             [matrix_hit | _] <- result.hits[:find_matrix],
+             [avatar_hit | _] <- result.hits[:find_avatar] do
+          get_title.(matrix_hit) == "The Matrix" and get_title.(avatar_hit) == "Avatar"
+        else
+          _ -> false
+        end
+      end)
     end
   end
 

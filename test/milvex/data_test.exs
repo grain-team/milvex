@@ -199,23 +199,6 @@ defmodule Milvex.DataTest do
       assert Data.num_rows(data) == 2
       assert Data.get_field(data, "name") == ["Alice", "Bob"]
     end
-
-    test "to_proto excludes auto_id fields" do
-      schema =
-        Schema.build!(
-          name: "test",
-          fields: [
-            Field.primary_key("id", :int64, auto_id: true),
-            Field.varchar("name", 128)
-          ]
-        )
-
-      {:ok, data} = Data.from_rows([%{name: "Test"}], schema)
-      proto = Data.to_proto(data)
-
-      assert length(proto) == 1
-      assert hd(proto).field_name == "name"
-    end
   end
 
   describe "with nullable fields" do

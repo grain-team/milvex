@@ -34,6 +34,7 @@ defmodule Milvex.Data do
   """
 
   alias Milvex.Data.FieldData
+  alias Milvex.Errors.Invalid
   alias Milvex.Schema
 
   @type t :: %__MODULE__{
@@ -121,7 +122,6 @@ defmodule Milvex.Data do
   @spec to_proto(t()) :: [Milvex.Milvus.Proto.Schema.FieldData.t()]
   def to_proto(%__MODULE__{fields: fields, schema: schema}) do
     schema.fields
-    |> Enum.filter(fn field -> not field.auto_id end)
     |> Enum.map(fn field ->
       values = Map.get(fields, field.name, [])
       FieldData.to_proto(field.name, values, field)
@@ -283,7 +283,5 @@ defmodule Milvex.Data do
     |> length()
   end
 
-  defp invalid_error(field, message) do
-    Milvex.Errors.Invalid.exception(field: field, message: message)
-  end
+  defp invalid_error(field, message), do: Invalid.exception(field: field, message: message)
 end

@@ -71,7 +71,17 @@ defmodule Milvex.Config do
                        Zoi.integer(description: "Health check interval in milliseconds")
                        |> Zoi.min(1_000)
                        |> Zoi.optional()
-                       |> Zoi.default(30_000)
+                       |> Zoi.default(30_000),
+                     adapter:
+                       Zoi.any(description: "GRPC client adapter module")
+                       |> Zoi.optional()
+                       |> Zoi.default(GRPC.Client.Adapters.Gun),
+                     adapter_opts:
+                       Zoi.any(
+                         description: "Adapter-specific options passed to GRPC.Stub.connect"
+                       )
+                       |> Zoi.optional()
+                       |> Zoi.default([])
                    },
                    description: "Configuration options for connecting to a Milvus server",
                    example: %{

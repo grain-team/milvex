@@ -101,6 +101,13 @@ defmodule Milvex.Data do
     with :ok <- validate_columns(columns, schema) do
       num_rows = get_column_length(columns)
 
+      columns =
+        if schema.enable_dynamic_field do
+          separate_dynamic_columns(columns, schema)
+        else
+          columns
+        end
+
       {:ok, %__MODULE__{fields: columns, schema: schema, num_rows: num_rows}}
     end
   end
@@ -121,11 +128,22 @@ defmodule Milvex.Data do
   """
   @spec to_proto(t()) :: [Milvex.Milvus.Proto.Schema.FieldData.t()]
   def to_proto(%__MODULE__{fields: fields, schema: schema}) do
-    schema.fields
-    |> Enum.map(fn field ->
-      values = Map.get(fields, field.name, [])
-      FieldData.to_proto(field.name, values, field)
-    end)
+    schema_field_data =
+      schema.fields
+      |> Enum.filter(fn field -> Map.has_key?(fields, field.name) end)
+      |> Enum.map(fn field ->
+        values = Map.get(fields, field.name)
+        FieldData.to_proto(field.name, values, field)
+      end)
+
+    case {schema.enable_dynamic_field, Map.get(fields, "$meta")} do
+      {true, dynamic_values} when dynamic_values != nil ->
+        dynamic_field_data = FieldData.to_proto_dynamic("$meta", dynamic_values)
+        schema_field_data ++ [dynamic_field_data]
+
+      _ ->
+        schema_field_data
+    end
   end
 
   @doc """
@@ -158,15 +176,71 @@ defmodule Milvex.Data do
       |> Enum.filter(fn f -> not f.auto_id end)
       |> Enum.map(& &1.name)
 
+    field_names_set = MapSet.new(field_names)
     init = Map.new(field_names, fn name -> {name, []} end)
 
-    rows
-    |> Enum.reduce(init, fn row, acc ->
-      Enum.reduce(field_names, acc, fn name, inner_acc ->
-        Map.update!(inner_acc, name, fn vals -> [get_row_value(row, name) | vals] end)
+    columns =
+      rows
+      |> Enum.reduce(init, fn row, acc ->
+        Enum.reduce(field_names, acc, fn name, inner_acc ->
+          Map.update!(inner_acc, name, fn vals -> [get_row_value(row, name) | vals] end)
+        end)
       end)
-    end)
-    |> Map.new(fn {k, v} -> {k, Enum.reverse(v)} end)
+      |> Map.new(fn {k, v} -> {k, Enum.reverse(v)} end)
+
+    if schema.enable_dynamic_field do
+      add_dynamic_fields(columns, rows, field_names_set)
+    else
+      columns
+    end
+  end
+
+  defp add_dynamic_fields(columns, rows, schema_field_names) do
+    dynamic_values =
+      rows
+      |> Enum.map(fn row ->
+        row
+        |> Enum.reject(fn {k, _v} ->
+          key = normalize_key(k)
+          MapSet.member?(schema_field_names, key)
+        end)
+        |> Map.new(fn {k, v} -> {normalize_key(k), v} end)
+      end)
+
+    if Enum.all?(dynamic_values, &(map_size(&1) == 0)) do
+      columns
+    else
+      Map.put(columns, "$meta", dynamic_values)
+    end
+  end
+
+  defp normalize_key(k) when is_atom(k), do: Atom.to_string(k)
+  defp normalize_key(k), do: k
+
+  defp separate_dynamic_columns(columns, schema) do
+    schema_field_names =
+      schema.fields
+      |> Enum.map(& &1.name)
+      |> MapSet.new()
+
+    {schema_columns, dynamic_columns} =
+      Map.split_with(columns, fn {k, _v} -> MapSet.member?(schema_field_names, k) end)
+
+    if map_size(dynamic_columns) == 0 do
+      schema_columns
+    else
+      num_rows = get_column_length(columns)
+      dynamic_values = transpose_dynamic_columns_to_rows(dynamic_columns, num_rows)
+      Map.put(schema_columns, "$meta", dynamic_values)
+    end
+  end
+
+  defp transpose_dynamic_columns_to_rows(dynamic_columns, num_rows) do
+    for i <- 0..(num_rows - 1) do
+      Map.new(dynamic_columns, fn {field_name, values} ->
+        {field_name, Enum.at(values, i)}
+      end)
+    end
   end
 
   defp get_row_value(row, field_name) do

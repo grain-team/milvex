@@ -317,4 +317,176 @@ defmodule Milvex.DataTest do
       assert "name" in names
     end
   end
+
+  describe "with dynamic fields enabled" do
+    setup do
+      schema =
+        Schema.build!(
+          name: "test_dynamic",
+          enable_dynamic_field: true,
+          fields: [
+            Field.primary_key("id", :int64),
+            Field.varchar("title", 256)
+          ]
+        )
+
+      {:ok, schema: schema}
+    end
+
+    test "from_rows preserves extra fields as $meta", %{schema: schema} do
+      rows = [
+        %{id: 1, title: "Item 1", category: "books", rating: 4.5},
+        %{id: 2, title: "Item 2", category: "movies", rating: 3.0}
+      ]
+
+      {:ok, data} = Data.from_rows(rows, schema)
+
+      assert Data.get_field(data, "$meta") == [
+               %{"category" => "books", "rating" => 4.5},
+               %{"category" => "movies", "rating" => 3.0}
+             ]
+    end
+
+    test "from_rows handles atom keys in dynamic fields", %{schema: schema} do
+      rows = [
+        %{id: 1, title: "Item 1", extra_field: "value1"},
+        %{id: 2, title: "Item 2", extra_field: "value2"}
+      ]
+
+      {:ok, data} = Data.from_rows(rows, schema)
+      meta = Data.get_field(data, "$meta")
+
+      assert Enum.all?(meta, fn m -> Map.has_key?(m, "extra_field") end)
+    end
+
+    test "from_rows handles string keys in dynamic fields", %{schema: schema} do
+      rows = [
+        %{"id" => 1, "title" => "Item 1", "extra_field" => "value1"},
+        %{"id" => 2, "title" => "Item 2", "extra_field" => "value2"}
+      ]
+
+      {:ok, data} = Data.from_rows(rows, schema)
+      meta = Data.get_field(data, "$meta")
+
+      assert Enum.all?(meta, fn m -> Map.has_key?(m, "extra_field") end)
+    end
+
+    test "from_rows omits $meta when no extra fields present", %{schema: schema} do
+      rows = [
+        %{id: 1, title: "Item 1"},
+        %{id: 2, title: "Item 2"}
+      ]
+
+      {:ok, data} = Data.from_rows(rows, schema)
+
+      refute Map.has_key?(data.fields, "$meta")
+    end
+
+    test "from_columns preserves extra columns as $meta", %{schema: schema} do
+      columns = %{
+        "id" => [1, 2],
+        "title" => ["Item 1", "Item 2"],
+        "category" => ["books", "movies"],
+        "rating" => [4.5, 3.0]
+      }
+
+      {:ok, data} = Data.from_columns(columns, schema)
+
+      assert Data.get_field(data, "$meta") == [
+               %{"category" => "books", "rating" => 4.5},
+               %{"category" => "movies", "rating" => 3.0}
+             ]
+    end
+
+    test "from_columns omits $meta when no extra columns", %{schema: schema} do
+      columns = %{
+        "id" => [1, 2],
+        "title" => ["Item 1", "Item 2"]
+      }
+
+      {:ok, data} = Data.from_columns(columns, schema)
+
+      refute Map.has_key?(data.fields, "$meta")
+    end
+
+    test "to_proto includes dynamic field with is_dynamic flag", %{schema: schema} do
+      rows = [
+        %{id: 1, title: "Item 1", extra: "value"}
+      ]
+
+      {:ok, data} = Data.from_rows(rows, schema)
+      proto = Data.to_proto(data)
+
+      dynamic_field = Enum.find(proto, &(&1.field_name == "$meta"))
+      assert dynamic_field != nil
+      assert dynamic_field.is_dynamic == true
+      assert dynamic_field.type == :JSON
+    end
+
+    test "handles nested data in dynamic fields", %{schema: schema} do
+      rows = [
+        %{id: 1, title: "Item 1", metadata: %{tags: ["a", "b"], count: 42}}
+      ]
+
+      {:ok, data} = Data.from_rows(rows, schema)
+      meta = Data.get_field(data, "$meta")
+
+      assert [%{"metadata" => nested}] = meta
+      assert nested[:tags] == ["a", "b"]
+      assert nested[:count] == 42
+    end
+  end
+
+  describe "without dynamic fields" do
+    test "extra fields in rows are ignored" do
+      schema =
+        Schema.build!(
+          name: "test_no_dynamic",
+          enable_dynamic_field: false,
+          fields: [
+            Field.primary_key("id", :int64),
+            Field.varchar("title", 256)
+          ]
+        )
+
+      rows = [
+        %{id: 1, title: "Item 1", extra: "ignored"}
+      ]
+
+      {:ok, data} = Data.from_rows(rows, schema)
+
+      refute Map.has_key?(data.fields, "$meta")
+      refute Map.has_key?(data.fields, "extra")
+    end
+
+    test "to_proto does not include $meta even if manually present in fields" do
+      schema =
+        Schema.build!(
+          name: "test_no_dynamic",
+          enable_dynamic_field: false,
+          fields: [
+            Field.primary_key("id", :int64),
+            Field.varchar("title", 256)
+          ]
+        )
+
+      data = %Data{
+        fields: %{
+          "id" => [1, 2],
+          "title" => ["Item 1", "Item 2"],
+          "$meta" => [%{"extra" => "value1"}, %{"extra" => "value2"}]
+        },
+        schema: schema,
+        num_rows: 2
+      }
+
+      proto = Data.to_proto(data)
+
+      assert length(proto) == 2
+      field_names = Enum.map(proto, & &1.field_name)
+      assert "id" in field_names
+      assert "title" in field_names
+      refute "$meta" in field_names
+    end
+  end
 end

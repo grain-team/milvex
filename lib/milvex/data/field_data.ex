@@ -48,6 +48,29 @@ defmodule Milvex.Data.FieldData do
   end
 
   @doc """
+  Converts dynamic field values to a FieldData proto struct with is_dynamic flag.
+
+  Used for dynamic fields when `enable_dynamic_field` is true on the schema.
+  Each value should be a map representing the dynamic fields for that row.
+
+  ## Parameters
+    - `field_name` - Name of the dynamic field (typically "$meta")
+    - `values` - List of maps, one per row, containing the dynamic field values
+  """
+  @spec to_proto_dynamic(String.t(), list(map())) :: FieldData.t()
+  def to_proto_dynamic(field_name, values) do
+    json_bytes = Enum.map(values, &encode_json/1)
+    scalar_field = %ScalarField{data: {:json_data, %JSONArray{data: json_bytes}}}
+
+    %FieldData{
+      field_name: field_name,
+      type: :JSON,
+      field: {:scalars, scalar_field},
+      is_dynamic: true
+    }
+  end
+
+  @doc """
   Extracts values from a FieldData proto struct.
 
   Returns a tuple of `{field_name, values}` where values is a list.

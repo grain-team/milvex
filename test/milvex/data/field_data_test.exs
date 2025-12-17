@@ -359,4 +359,48 @@ defmodule Milvex.Data.FieldDataTest do
       assert extracted == original
     end
   end
+
+  describe "to_proto_dynamic/2" do
+    test "creates dynamic field with is_dynamic flag" do
+      values = [%{"key" => "value1"}, %{"key" => "value2"}]
+      proto = FieldData.to_proto_dynamic("$meta", values)
+
+      assert proto.field_name == "$meta"
+      assert proto.type == :JSON
+      assert proto.is_dynamic == true
+      assert {:scalars, scalar} = proto.field
+      assert {:json_data, %JSONArray{data: json_bytes}} = scalar.data
+      assert length(json_bytes) == 2
+    end
+
+    test "handles empty maps in dynamic values" do
+      values = [%{}, %{"key" => "value"}]
+      proto = FieldData.to_proto_dynamic("$meta", values)
+
+      assert proto.is_dynamic == true
+      assert {:scalars, scalar} = proto.field
+      assert {:json_data, %JSONArray{data: json_bytes}} = scalar.data
+      assert List.first(json_bytes) == "{}"
+    end
+
+    test "handles nested maps in dynamic values" do
+      values = [%{"nested" => %{"a" => 1, "b" => [1, 2, 3]}}]
+      proto = FieldData.to_proto_dynamic("$meta", values)
+
+      assert proto.is_dynamic == true
+      assert {:scalars, scalar} = proto.field
+      assert {:json_data, %JSONArray{data: json_bytes}} = scalar.data
+
+      {:ok, decoded} = Jason.decode(List.first(json_bytes))
+      assert decoded == %{"nested" => %{"a" => 1, "b" => [1, 2, 3]}}
+    end
+
+    test "handles empty list of dynamic values" do
+      proto = FieldData.to_proto_dynamic("$meta", [])
+
+      assert proto.is_dynamic == true
+      assert {:scalars, scalar} = proto.field
+      assert {:json_data, %JSONArray{data: []}} = scalar.data
+    end
+  end
 end

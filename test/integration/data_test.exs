@@ -252,4 +252,181 @@ defmodule Milvex.Integration.DataTest do
       assert %Milvex.Errors.Grpc{} = error
     end
   end
+
+  describe "insert with dynamic fields" do
+    test "inserts rows with dynamic fields", %{conn: conn} do
+      name = unique_collection_name("insert_dynamic")
+
+      schema =
+        Schema.build!(
+          name: name,
+          enable_dynamic_field: true,
+          fields: [
+            Field.primary_key("id", :int64, auto_id: true),
+            Field.varchar("title", 256),
+            Field.vector("embedding", 4)
+          ]
+        )
+
+      on_exit(fn -> cleanup_collection(conn, name) end)
+
+      :ok = Milvex.create_collection(conn, name, schema)
+
+      rows = [
+        %{title: "Item 1", embedding: random_vector(4), category: "books", rating: 4.5},
+        %{title: "Item 2", embedding: random_vector(4), category: "movies", rating: 3.0}
+      ]
+
+      assert {:ok, result} = Milvex.insert(conn, name, rows)
+      assert result.insert_count == 2
+    end
+
+    test "queries dynamic fields after insert", %{conn: conn} do
+      name = unique_collection_name("query_dynamic")
+
+      schema =
+        Schema.build!(
+          name: name,
+          enable_dynamic_field: true,
+          fields: [
+            Field.primary_key("id", :int64, auto_id: false),
+            Field.varchar("title", 256),
+            Field.vector("embedding", 4)
+          ]
+        )
+
+      on_exit(fn -> cleanup_collection(conn, name) end)
+
+      :ok = Milvex.create_collection(conn, name, schema)
+
+      :ok =
+        Milvex.create_index(conn, name, "embedding",
+          index_type: "AUTOINDEX",
+          metric_type: "COSINE"
+        )
+
+      rows = [
+        %{id: 1, title: "Item 1", embedding: random_vector(4), category: "books"},
+        %{id: 2, title: "Item 2", embedding: random_vector(4), category: "movies"}
+      ]
+
+      {:ok, _} = Milvex.insert(conn, name, rows)
+      :ok = Milvex.load_collection(conn, name)
+
+      assert_eventually(
+        match?(
+          {:ok, %{rows: [%{"$meta" => %{"category" => "books"}} | _]}},
+          Milvex.query(conn, name, "id == 1", output_fields: ["title", "category"])
+        )
+      )
+    end
+
+    test "filters by dynamic fields in query", %{conn: conn} do
+      name = unique_collection_name("filter_dynamic")
+
+      schema =
+        Schema.build!(
+          name: name,
+          enable_dynamic_field: true,
+          fields: [
+            Field.primary_key("id", :int64, auto_id: false),
+            Field.varchar("title", 256),
+            Field.vector("embedding", 4)
+          ]
+        )
+
+      on_exit(fn -> cleanup_collection(conn, name) end)
+
+      :ok = Milvex.create_collection(conn, name, schema)
+
+      :ok =
+        Milvex.create_index(conn, name, "embedding",
+          index_type: "AUTOINDEX",
+          metric_type: "COSINE"
+        )
+
+      rows = [
+        %{id: 1, title: "Book 1", embedding: random_vector(4), category: "books", rating: 4.5},
+        %{id: 2, title: "Movie 1", embedding: random_vector(4), category: "movies", rating: 3.0},
+        %{id: 3, title: "Book 2", embedding: random_vector(4), category: "books", rating: 5.0}
+      ]
+
+      {:ok, _} = Milvex.insert(conn, name, rows)
+      :ok = Milvex.load_collection(conn, name)
+
+      assert_eventually(fn ->
+        case Milvex.query(conn, name, "category == \"books\"",
+               output_fields: ["title", "category", "rating"]
+             ) do
+          {:ok, %{rows: result_rows}} when length(result_rows) == 2 ->
+            result_rows
+            |> Enum.all?(fn row ->
+              row["$meta"]["category"] == "books" and
+                row["title"] in ["Book 1", "Book 2"] and
+                row["$meta"]["rating"] in [4.5, 5.0]
+            end)
+
+          _ ->
+            false
+        end
+      end)
+    end
+
+    test "searches with dynamic field filter", %{conn: conn} do
+      name = unique_collection_name("search_dynamic")
+
+      schema =
+        Schema.build!(
+          name: name,
+          enable_dynamic_field: true,
+          fields: [
+            Field.primary_key("id", :int64, auto_id: false),
+            Field.varchar("title", 256),
+            Field.vector("embedding", 4)
+          ]
+        )
+
+      on_exit(fn -> cleanup_collection(conn, name) end)
+
+      :ok = Milvex.create_collection(conn, name, schema)
+
+      :ok =
+        Milvex.create_index(conn, name, "embedding",
+          index_type: "AUTOINDEX",
+          metric_type: "COSINE"
+        )
+
+      rows = [
+        %{id: 1, title: "Item 1", embedding: [1.0, 0.0, 0.0, 0.0], category: "A"},
+        %{id: 2, title: "Item 2", embedding: [0.9, 0.1, 0.0, 0.0], category: "A"},
+        %{id: 3, title: "Item 3", embedding: [0.8, 0.2, 0.0, 0.0], category: "B"}
+      ]
+
+      {:ok, _} = Milvex.insert(conn, name, rows)
+      :ok = Milvex.load_collection(conn, name)
+
+      query_vector = [1.0, 0.0, 0.0, 0.0]
+
+      assert_eventually(fn ->
+        case Milvex.search(conn, name, [query_vector],
+               vector_field: "embedding",
+               top_k: 10,
+               filter: "category == \"A\"",
+               output_fields: ["title", "category"]
+             ) do
+          {:ok, %{hits: [result_hits | _]}} when length(result_hits) == 2 ->
+            result_hits
+            |> Enum.all?(fn hit ->
+              hit.fields["$meta"]["category"] == "A" and
+                hit.fields["title"] in ["Item 1", "Item 2"] and
+                is_float(hit.distance) and
+                is_integer(hit.id)
+            end)
+
+          _ ->
+            false
+        end
+      end)
+    end
+  end
 end

@@ -14,7 +14,7 @@ Add `milvex` to your dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:milvex, "~> 0.1.0"}
+    {:milvex, "~> 0.4.1"}
   ]
 end
 ```

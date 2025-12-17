@@ -94,4 +94,51 @@ defmodule MilvexIntegrationTest do
       assert {:ok, false} = Milvex.has_collection(conn, @collection_name)
     end
   end
+
+  describe "Mint adapter" do
+    @mint_collection "test_mint_adapter"
+
+    test "connects and performs operations using Mint adapter", %{cluster: cluster} do
+      config =
+        cluster
+        |> MilvusContainer.connection_config()
+        |> Keyword.put(:adapter, GRPC.Client.Adapters.Mint)
+
+      {:ok, mint_conn} = Milvex.Connection.start_link(config)
+
+      on_exit(fn ->
+        try do
+          Milvex.Connection.disconnect(mint_conn)
+        catch
+          :exit, _ -> :ok
+        end
+      end)
+
+      assert Milvex.Connection.connected?(mint_conn)
+
+      schema =
+        Schema.build!(
+          name: @mint_collection,
+          fields: [
+            Field.primary_key("id", :int64, auto_id: true),
+            Field.varchar("name", 128),
+            Field.vector("vec", 4)
+          ]
+        )
+
+      assert :ok = Milvex.create_collection(mint_conn, @mint_collection, schema)
+      assert {:ok, true} = Milvex.has_collection(mint_conn, @mint_collection)
+
+      {:ok, data} =
+        Data.from_rows(
+          [%{name: "test", vec: [0.1, 0.2, 0.3, 0.4]}],
+          schema
+        )
+
+      assert {:ok, result} = Milvex.insert(mint_conn, @mint_collection, data)
+      assert result.insert_count == 1
+
+      assert :ok = Milvex.drop_collection(mint_conn, @mint_collection)
+    end
+  end
 end

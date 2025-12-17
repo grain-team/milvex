@@ -192,6 +192,10 @@ defmodule Milvex.Connection do
     {:keep_state_and_data, [{:reply, from, false}]}
   end
 
+  def connecting(:info, _msg, _data) do
+    :keep_state_and_data
+  end
+
   # --- :connected state ---
 
   def connected(:enter, _old_state, data) do
@@ -225,6 +229,10 @@ defmodule Milvex.Connection do
     end
   end
 
+  def connected(:info, _msg, _data) do
+    :keep_state_and_data
+  end
+
   # --- :reconnecting state ---
 
   def reconnecting(:enter, _old_state, _data) do
@@ -245,6 +253,10 @@ defmodule Milvex.Connection do
 
   def reconnecting({:call, from}, :connected?, _data) do
     {:keep_state_and_data, [{:reply, from, false}]}
+  end
+
+  def reconnecting(:info, _msg, _data) do
+    :keep_state_and_data
   end
 
   # --- Termination ---
@@ -324,6 +336,8 @@ defmodule Milvex.Connection do
     []
     |> maybe_add_ssl(config)
     |> maybe_add_auth_headers(config)
+    |> maybe_add_adapter(config)
+    |> maybe_add_adapter_opts(config)
   end
 
   defp maybe_add_ssl(opts, %{ssl: true, ssl_options: ssl_options}) do
@@ -355,6 +369,18 @@ defmodule Milvex.Connection do
       Keyword.put(opts, :headers, headers)
     end
   end
+
+  defp maybe_add_adapter(opts, %{adapter: adapter}) when not is_nil(adapter) do
+    Keyword.put(opts, :adapter, adapter)
+  end
+
+  defp maybe_add_adapter(opts, _config), do: opts
+
+  defp maybe_add_adapter_opts(opts, %{adapter_opts: adapter_opts}) when adapter_opts != [] do
+    Keyword.put(opts, :adapter_opts, adapter_opts)
+  end
+
+  defp maybe_add_adapter_opts(opts, _config), do: opts
 
   defp perform_health_check(channel) do
     request = %CheckHealthRequest{}

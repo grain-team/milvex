@@ -113,6 +113,7 @@ defmodule Milvex.MixProject do
       {:grpc, "~> 0.11.5"},
       {:jason, "~> 1.4"},
       {:mimic, "~> 2.2", only: :test},
+      {:mint, "~> 1.7", optional: true},
       {:mix_audit, ">= 0.0.0", only: [:dev, :test], runtime: false},
       {:nx, "~> 0.10", optional: true},
       {:protobuf, "~> 0.15.0"},

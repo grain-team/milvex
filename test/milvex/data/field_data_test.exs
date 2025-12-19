@@ -4,6 +4,7 @@ defmodule Milvex.Data.FieldDataTest do
   alias Milvex.Data.FieldData
   alias Milvex.Schema.Field
 
+  alias Milvex.Milvus.Proto.Schema.ArrayArray
   alias Milvex.Milvus.Proto.Schema.BoolArray
   alias Milvex.Milvus.Proto.Schema.DoubleArray
   alias Milvex.Milvus.Proto.Schema.FloatArray
@@ -13,6 +14,7 @@ defmodule Milvex.Data.FieldDataTest do
   alias Milvex.Milvus.Proto.Schema.ScalarField
   alias Milvex.Milvus.Proto.Schema.SparseFloatArray
   alias Milvex.Milvus.Proto.Schema.StringArray
+  alias Milvex.Milvus.Proto.Schema.StructArrayField
   alias Milvex.Milvus.Proto.Schema.VectorField
 
   alias Milvex.Milvus.Proto.Schema.FieldData, as: FieldDataProto
@@ -401,6 +403,173 @@ defmodule Milvex.Data.FieldDataTest do
       assert proto.is_dynamic == true
       assert {:scalars, scalar} = proto.field
       assert {:json_data, %JSONArray{data: []}} = scalar.data
+    end
+  end
+
+  describe "from_proto/1 for struct arrays" do
+    test "transposes struct array columns to rows" do
+      text_scalar = %ScalarField{
+        data:
+          {:array_data,
+           %ArrayArray{
+             data: [
+               %ScalarField{data: {:string_data, %StringArray{data: ["sent1", "sent2"]}}},
+               %ScalarField{data: {:string_data, %StringArray{data: ["sent3", "sent4"]}}}
+             ],
+             element_type: :VarChar
+           }}
+      }
+
+      speaker_scalar = %ScalarField{
+        data:
+          {:array_data,
+           %ArrayArray{
+             data: [
+               %ScalarField{data: {:string_data, %StringArray{data: ["sp1", "sp2"]}}},
+               %ScalarField{data: {:string_data, %StringArray{data: ["sp3", "sp4"]}}}
+             ],
+             element_type: :VarChar
+           }}
+      }
+
+      struct_array = %StructArrayField{
+        fields: [
+          %FieldDataProto{
+            field_name: "text",
+            type: :Array,
+            field: {:scalars, text_scalar}
+          },
+          %FieldDataProto{
+            field_name: "speaker_id",
+            type: :Array,
+            field: {:scalars, speaker_scalar}
+          }
+        ]
+      }
+
+      proto = %FieldDataProto{
+        field_name: "chunks",
+        type: :ArrayOfStruct,
+        field: {:struct_arrays, struct_array}
+      }
+
+      {name, values} = FieldData.from_proto(proto)
+
+      assert name == "chunks"
+      assert length(values) == 2
+
+      assert Enum.at(values, 0) == %{
+               "text" => ["sent1", "sent2"],
+               "speaker_id" => ["sp1", "sp2"]
+             }
+
+      assert Enum.at(values, 1) == %{
+               "text" => ["sent3", "sent4"],
+               "speaker_id" => ["sp3", "sp4"]
+             }
+    end
+
+    test "handles empty struct array" do
+      struct_array = %StructArrayField{fields: []}
+
+      proto = %FieldDataProto{
+        field_name: "empty_chunks",
+        type: :ArrayOfStruct,
+        field: {:struct_arrays, struct_array}
+      }
+
+      {name, values} = FieldData.from_proto(proto)
+
+      assert name == "empty_chunks"
+      assert values == []
+    end
+
+    test "handles struct array with single field" do
+      text_scalar = %ScalarField{
+        data:
+          {:array_data,
+           %ArrayArray{
+             data: [
+               %ScalarField{data: {:string_data, %StringArray{data: ["a", "b"]}}},
+               %ScalarField{data: {:string_data, %StringArray{data: ["c", "d"]}}}
+             ],
+             element_type: :VarChar
+           }}
+      }
+
+      struct_array = %StructArrayField{
+        fields: [
+          %FieldDataProto{
+            field_name: "text",
+            type: :Array,
+            field: {:scalars, text_scalar}
+          }
+        ]
+      }
+
+      proto = %FieldDataProto{
+        field_name: "chunks",
+        type: :ArrayOfStruct,
+        field: {:struct_arrays, struct_array}
+      }
+
+      {name, values} = FieldData.from_proto(proto)
+
+      assert name == "chunks"
+      assert values == [%{"text" => ["a", "b"]}, %{"text" => ["c", "d"]}]
+    end
+
+    test "handles struct array with numeric fields" do
+      id_scalar = %ScalarField{
+        data:
+          {:array_data,
+           %ArrayArray{
+             data: [
+               %ScalarField{data: {:long_data, %LongArray{data: [1, 2]}}},
+               %ScalarField{data: {:long_data, %LongArray{data: [3, 4]}}}
+             ],
+             element_type: :Int64
+           }}
+      }
+
+      score_scalar = %ScalarField{
+        data:
+          {:array_data,
+           %ArrayArray{
+             data: [
+               %ScalarField{data: {:float_data, %FloatArray{data: [0.5, 0.6]}}},
+               %ScalarField{data: {:float_data, %FloatArray{data: [0.7, 0.8]}}}
+             ],
+             element_type: :Float
+           }}
+      }
+
+      struct_array = %StructArrayField{
+        fields: [
+          %FieldDataProto{
+            field_name: "id",
+            type: :Array,
+            field: {:scalars, id_scalar}
+          },
+          %FieldDataProto{
+            field_name: "score",
+            type: :Array,
+            field: {:scalars, score_scalar}
+          }
+        ]
+      }
+
+      proto = %FieldDataProto{
+        field_name: "items",
+        type: :ArrayOfStruct,
+        field: {:struct_arrays, struct_array}
+      }
+
+      {name, values} = FieldData.from_proto(proto)
+
+      assert name == "items"
+      assert Enum.at(values, 0) == %{"id" => [1, 2], "score" => [0.5, 0.6]}
+      assert Enum.at(values, 1) == %{"id" => [3, 4], "score" => [0.7, 0.8]}
     end
   end
 end

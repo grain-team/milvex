@@ -165,18 +165,21 @@ defmodule Milvex.Data.FieldData do
   Extracts values from a ScalarField proto.
   """
   @spec extract_scalar_values(ScalarField.t()) :: list()
-  def extract_scalar_values(%ScalarField{data: data}) do
-    case data do
-      {:bool_data, %BoolArray{data: values}} -> values
-      {:int_data, %IntArray{data: values}} -> values
-      {:long_data, %LongArray{data: values}} -> values
-      {:float_data, %FloatArray{data: values}} -> values
-      {:double_data, %DoubleArray{data: values}} -> values
-      {:string_data, %StringArray{data: values}} -> values
-      {:json_data, %JSONArray{data: values}} -> Enum.map(values, &decode_json/1)
-      _ -> []
-    end
+  def extract_scalar_values(%ScalarField{data: data}), do: do_extract_scalar(data)
+
+  defp do_extract_scalar({:bool_data, %BoolArray{data: values}}), do: values
+  defp do_extract_scalar({:int_data, %IntArray{data: values}}), do: values
+  defp do_extract_scalar({:long_data, %LongArray{data: values}}), do: values
+  defp do_extract_scalar({:float_data, %FloatArray{data: values}}), do: values
+  defp do_extract_scalar({:double_data, %DoubleArray{data: values}}), do: values
+  defp do_extract_scalar({:string_data, %StringArray{data: values}}), do: values
+  defp do_extract_scalar({:json_data, %JSONArray{data: values}}), do: Enum.map(values, &decode_json/1)
+
+  defp do_extract_scalar({:array_data, %ArrayArray{data: scalar_fields}}) do
+    Enum.map(scalar_fields, &extract_scalar_values/1)
   end
+
+  defp do_extract_scalar(_), do: []
 
   @doc """
   Extracts values from a VectorField proto.
@@ -337,10 +340,28 @@ defmodule Milvex.Data.FieldData do
   defp extract_values(_), do: []
 
   defp extract_struct_array_values(%StructArrayField{fields: fields}) do
-    Enum.map(fields, fn field_data ->
-      {field_data.field_name, extract_values(field_data)}
+    columns =
+      Enum.map(fields, fn field_data ->
+        {field_data.field_name, extract_values(field_data)}
+      end)
+      |> Map.new()
+
+    transpose_struct_columns_to_rows(columns)
+  end
+
+  defp transpose_struct_columns_to_rows(columns) when map_size(columns) == 0, do: []
+
+  defp transpose_struct_columns_to_rows(columns) do
+    {field_names, value_lists} = columns |> Map.to_list() |> Enum.unzip()
+
+    value_lists
+    |> Enum.zip()
+    |> Enum.map(fn tuple ->
+      tuple
+      |> Tuple.to_list()
+      |> Enum.zip(field_names)
+      |> Map.new(fn {val, name} -> {name, val} end)
     end)
-    |> Map.new()
   end
 
   defp chunk_vector(flat_list, dim) when is_integer(dim) and dim > 0 do

@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.4.2](https://github.com/grain-team/milvex/compare/v0.4.0...v0.4.2) (2025-12-19)
+
+
+### Features
+
+* Add support to multi-vectors ([b76d4d0](https://github.com/grain-team/milvex/commit/b76d4d0a0644da031e196ce7d8670b927922dd86))
+
+
+### Bug Fixes
+
+* Fixed cacert config ([6af8635](https://github.com/grain-team/milvex/commit/6af8635ec5ec169ae788750ae1df9a0ff34d52d9))
+* Fixed dynamic fields parsing ([2df934b](https://github.com/grain-team/milvex/commit/2df934bdad89011d6eeef946ee71ca4a30454769))
+* Fixed license ([6377161](https://github.com/grain-team/milvex/commit/63771611c2292f6d4c9ddef89863b157c66dc9b1))
+* Handling unmatched events from gun and allowing adapter change ([#7](https://github.com/grain-team/milvex/issues/7)) ([0dcc0bb](https://github.com/grain-team/milvex/commit/0dcc0bb995e94efd941cfb3a891faba94116f8a9))
+
 ## [0.4.0](https://github.com/ycastorium/milvex/compare/v0.3.1...v0.4.0) (2025-12-17)
 
 

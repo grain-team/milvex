@@ -173,7 +173,9 @@ defmodule Milvex.Data.FieldData do
   defp do_extract_scalar({:float_data, %FloatArray{data: values}}), do: values
   defp do_extract_scalar({:double_data, %DoubleArray{data: values}}), do: values
   defp do_extract_scalar({:string_data, %StringArray{data: values}}), do: values
-  defp do_extract_scalar({:json_data, %JSONArray{data: values}}), do: Enum.map(values, &decode_json/1)
+
+  defp do_extract_scalar({:json_data, %JSONArray{data: values}}),
+    do: Enum.map(values, &decode_json/1)
 
   defp do_extract_scalar({:array_data, %ArrayArray{data: scalar_fields}}) do
     Enum.map(scalar_fields, &extract_scalar_values/1)
@@ -207,6 +209,9 @@ defmodule Milvex.Data.FieldData do
 
       {:sparse_float_vector, %SparseFloatArray{contents: contents}} ->
         decode_sparse_vectors(contents)
+
+      {:vector_array, %VectorArray{data: vector_fields}} ->
+        Enum.map(vector_fields, &extract_vector_values/1)
 
       _ ->
         []

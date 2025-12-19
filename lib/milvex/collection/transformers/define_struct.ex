@@ -97,6 +97,7 @@ defmodule Milvex.Collection.Transformers.DefineStruct do
 
   defp field_to_type(%{element_type: :varchar}), do: quote(do: [String.t()])
   defp field_to_type(%{element_type: :json}), do: quote(do: [map()])
+  defp field_to_type(%{element_type: :struct}), do: quote(do: [map()])
 
   defp field_to_type(_), do: quote(do: term())
 end

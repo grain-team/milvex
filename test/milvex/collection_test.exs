@@ -55,6 +55,25 @@ defmodule Milvex.CollectionTest do
     end
   end
 
+  defmodule StructArrayCollection do
+    use Milvex.Collection
+
+    collection do
+      name "struct_array_collection"
+
+      fields do
+        primary_key :id, :int64, auto_id: true
+
+        array :sentences, :struct,
+          max_capacity: 10,
+          struct_schema: [
+            Milvex.Schema.Field.varchar("text", 256),
+            Milvex.Schema.Field.vector("embedding", 128)
+          ]
+      end
+    end
+  end
+
   describe "basic collection definition" do
     test "extracts collection name" do
       assert Collection.collection_name(BasicCollection) == "test_collection"
@@ -326,6 +345,51 @@ defmodule Milvex.CollectionTest do
     test "to_proto/1 uses prefixed collection name" do
       proto = Collection.to_proto(StringPrefixCollection)
       assert proto.name == "prod_items"
+    end
+  end
+
+  describe "struct array fields" do
+    test "extracts struct array field with struct_schema" do
+      fields = Collection.fields(StructArrayCollection)
+      array_field = Enum.find(fields, &(&1.element_type == :struct))
+
+      assert array_field.name == :sentences
+      assert array_field.max_capacity == 10
+      assert length(array_field.struct_schema) == 2
+    end
+
+    test "struct_schema contains varchar and vector fields" do
+      fields = Collection.fields(StructArrayCollection)
+      array_field = Enum.find(fields, &(&1.element_type == :struct))
+
+      struct_fields = array_field.struct_schema
+      text_field = Enum.find(struct_fields, &(&1.name == "text"))
+      vector_field = Enum.find(struct_fields, &(&1.name == "embedding"))
+
+      assert text_field.data_type == :varchar
+      assert text_field.max_length == 256
+      assert vector_field.data_type == :float_vector
+      assert vector_field.dimension == 128
+    end
+
+    test "to_schema/1 converts struct array correctly" do
+      schema = Collection.to_schema(StructArrayCollection)
+      array_field = Enum.find(schema.fields, &(&1.name == "sentences"))
+
+      assert array_field.data_type == :array_of_struct
+      assert length(array_field.struct_schema) == 2
+    end
+
+    test "struct generates field for struct array" do
+      record = %StructArrayCollection{
+        id: 1,
+        sentences: [
+          %{"text" => "Hello", "embedding" => List.duplicate(0.0, 128)}
+        ]
+      }
+
+      assert record.id == 1
+      assert length(record.sentences) == 1
     end
   end
 end

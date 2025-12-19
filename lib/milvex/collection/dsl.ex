@@ -36,7 +36,8 @@ defmodule Milvex.Collection.Dsl do
     :double,
     :json,
     :text,
-    :varchar
+    :varchar,
+    :struct
   ]
   @vector_types [
     :binary_vector,
@@ -278,10 +279,12 @@ defmodule Milvex.Collection.Dsl do
 
     Requires `max_capacity` option specifying the maximum number of elements.
     For varchar arrays, also requires `max_length` for element size.
+    For struct arrays, requires `struct_schema` with a list of Milvex.Schema.Field definitions.
     """,
     examples: [
       "array :tags, :varchar, max_capacity: 100, max_length: 64",
-      "array :scores, :float, max_capacity: 10"
+      "array :scores, :float, max_capacity: 10",
+      "array :sentences, :struct, max_capacity: 50, struct_schema: [Field.varchar(\"text\", 4096), Field.vector(\"embedding\", 1024)]"
     ],
     target: Milvex.Collection.Dsl.Field,
     args: [:name, :element_type],
@@ -304,6 +307,11 @@ defmodule Milvex.Collection.Dsl do
       max_length: [
         type: :pos_integer,
         doc: "Maximum length for varchar elements (required when element_type is :varchar)"
+      ],
+      struct_schema: [
+        type: {:list, :any},
+        doc:
+          "List of Milvex.Schema.Field structs defining the nested struct schema (required when element_type is :struct)"
       ],
       nullable: [
         type: :boolean,

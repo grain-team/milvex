@@ -14,6 +14,7 @@ defmodule Milvex.Collection.Dsl.Field do
           max_length: pos_integer() | nil,
           max_capacity: pos_integer() | nil,
           element_type: atom() | nil,
+          struct_schema: [Milvex.Schema.Field.t()] | nil,
           auto_id: boolean(),
           nullable: boolean(),
           partition_key: boolean(),
@@ -29,6 +30,7 @@ defmodule Milvex.Collection.Dsl.Field do
     :max_length,
     :max_capacity,
     :element_type,
+    :struct_schema,
     :default,
     :description,
     :__spark_metadata__,
@@ -89,4 +91,11 @@ defmodule Milvex.Collection.Dsl.Field do
   @spec array?(t()) :: boolean()
   def array?(%__MODULE__{element_type: elem_type}) when not is_nil(elem_type), do: true
   def array?(_), do: false
+
+  @doc """
+  Returns true if this field is an array of structs field.
+  """
+  @spec array_of_structs?(t()) :: boolean()
+  def array_of_structs?(%__MODULE__{element_type: :struct}), do: true
+  def array_of_structs?(_), do: false
 end

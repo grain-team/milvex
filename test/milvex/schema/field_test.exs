@@ -183,6 +183,30 @@ defmodule Milvex.Schema.FieldTest do
         Field.array("tags", :varchar, [])
       end
     end
+
+    test "array/3 with struct element type creates array_of_struct" do
+      struct_fields = [
+        Field.varchar("text", 1024),
+        Field.vector("embedding", 128)
+      ]
+
+      field = Field.array("sentences", :struct, max_capacity: 50, struct_schema: struct_fields)
+      assert field.data_type == :array_of_struct
+      assert field.max_capacity == 50
+      assert field.struct_schema == struct_fields
+      assert field.element_type == :struct
+    end
+
+    test "struct/2 creates struct field" do
+      struct_fields = [
+        Field.varchar("text", 1024),
+        Field.vector("embedding", 128)
+      ]
+
+      field = Field.struct("sentence", fields: struct_fields)
+      assert field.data_type == :struct
+      assert field.struct_schema == struct_fields
+    end
   end
 
   describe "validate/1" do
@@ -269,6 +293,24 @@ defmodule Milvex.Schema.FieldTest do
       field = Field.new("tags", :array) |> Field.element_type(:varchar)
       assert {:error, error} = Field.validate(field)
       assert error.field == :max_capacity
+    end
+
+    test "rejects array_of_struct without struct_schema" do
+      field = %Field{
+        name: "sentences",
+        data_type: :array_of_struct,
+        max_capacity: 50,
+        element_type: :struct
+      }
+
+      assert {:error, error} = Field.validate(field)
+      assert error.field == :struct_schema
+    end
+
+    test "validates array_of_struct with struct_schema" do
+      struct_fields = [Field.varchar("text", 1024)]
+      field = Field.array("sentences", :struct, max_capacity: 50, struct_schema: struct_fields)
+      assert {:ok, _} = Field.validate(field)
     end
 
     test "rejects non-int64/varchar primary key" do
@@ -423,6 +465,29 @@ defmodule Milvex.Schema.FieldTest do
       assert Field.scalar_type?(:int64)
       assert Field.scalar_type?(:varchar)
       refute Field.scalar_type?(:float_vector)
+    end
+
+    test "array_of_struct?/1 checks if field is array of struct" do
+      struct_fields = [Field.varchar("text", 1024)]
+
+      array_of_struct =
+        Field.array("sentences", :struct, max_capacity: 50, struct_schema: struct_fields)
+
+      regular_array = Field.array("tags", :varchar, max_capacity: 100, max_length: 64)
+      scalar = Field.scalar("count", :int32)
+
+      assert Field.array_of_struct?(array_of_struct)
+      refute Field.array_of_struct?(regular_array)
+      refute Field.array_of_struct?(scalar)
+    end
+
+    test "struct?/1 checks if field is struct" do
+      struct_fields = [Field.varchar("text", 1024)]
+      struct_field = Field.struct("sentence", fields: struct_fields)
+      scalar = Field.scalar("count", :int32)
+
+      assert Field.struct?(struct_field)
+      refute Field.struct?(scalar)
     end
   end
 end

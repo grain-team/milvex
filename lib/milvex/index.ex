@@ -34,7 +34,7 @@ defmodule Milvex.Index do
     :scann
   ]
 
-  @metric_types [:l2, :ip, :cosine, :hamming, :jaccard]
+  @metric_types [:l2, :ip, :cosine, :hamming, :jaccard, :max_sim_cosine, :max_sim_ip]
 
   @index_schema Zoi.object(%{
                   name: Zoi.nullish(Zoi.string()),
@@ -56,7 +56,7 @@ defmodule Milvex.Index do
           | :gpu_ivf_pq
           | :scann
 
-  @type metric_type :: :l2 | :ip | :cosine | :hamming | :jaccard
+  @type metric_type :: :l2 | :ip | :cosine | :hamming | :jaccard | :max_sim_cosine | :max_sim_ip
 
   @type t :: %__MODULE__{
           name: String.t() | nil,
@@ -447,6 +447,8 @@ defmodule Milvex.Index do
   defp metric_type_to_string(:cosine), do: "COSINE"
   defp metric_type_to_string(:hamming), do: "HAMMING"
   defp metric_type_to_string(:jaccard), do: "JACCARD"
+  defp metric_type_to_string(:max_sim_cosine), do: "MAX_SIM_COSINE"
+  defp metric_type_to_string(:max_sim_ip), do: "MAX_SIM_IP"
 
   @doc """
   Returns list of all supported index types.

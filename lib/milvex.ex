@@ -48,6 +48,7 @@ defmodule Milvex do
   @default_consistency_level :Bounded
   @default_shards_num 1
   @default_top_k 10
+  @nested_field_regex ~r/^(\w+)\[(\w+)\]$/
 
   @typedoc """
   A collection identifier - either a string name or a module using `Milvex.Collection`.
@@ -791,8 +792,8 @@ defmodule Milvex do
     with {:ok, vector_field} <- require_option(opts, :vector_field),
          {:ok, channel} <- Connection.get_channel(conn),
          {:ok, info} <- describe_collection(conn, collection_name, opts),
-         {:ok, field} <- find_vector_field(info.schema, vector_field),
-         {:ok, placeholder_bytes} <- build_placeholder_group(vectors, field) do
+         {:ok, field, is_nested} <- find_vector_field(info.schema, vector_field),
+         {:ok, placeholder_bytes} <- build_placeholder_group(vectors, field, is_nested) do
       request = %SearchRequest{
         db_name: get_db_name(opts),
         collection_name: collection_name,
@@ -1135,6 +1136,23 @@ defmodule Milvex do
   end
 
   defp find_vector_field(schema, field_name) do
+    case parse_nested_field_name(field_name) do
+      {:nested, parent_name, child_name} ->
+        find_nested_vector_field(schema, field_name, parent_name, child_name)
+
+      :simple ->
+        find_simple_vector_field(schema, field_name)
+    end
+  end
+
+  defp parse_nested_field_name(field_name) do
+    case Regex.run(@nested_field_regex, field_name) do
+      [_, parent, child] -> {:nested, parent, child}
+      nil -> :simple
+    end
+  end
+
+  defp find_simple_vector_field(schema, field_name) do
     case Schema.get_field(schema, field_name) do
       nil ->
         {:error,
@@ -1142,7 +1160,7 @@ defmodule Milvex do
 
       field ->
         if Field.vector_type?(field.data_type) do
-          {:ok, field}
+          {:ok, field, false}
         else
           {:error,
            Invalid.exception(
@@ -1153,8 +1171,49 @@ defmodule Milvex do
     end
   end
 
-  defp build_placeholder_group(vectors, field) do
-    placeholder_type = vector_type_to_placeholder_type(field.data_type)
+  defp find_nested_vector_field(schema, full_name, parent_name, child_name) do
+    case Schema.get_field(schema, parent_name) do
+      nil ->
+        {:error,
+         Invalid.exception(field: :vector_field, message: "Field '#{full_name}' not found")}
+
+      %{data_type: :array_of_struct, struct_schema: struct_schema} when is_list(struct_schema) ->
+        find_child_vector_field(struct_schema, full_name, child_name)
+
+      _ ->
+        {:error,
+         Invalid.exception(
+           field: :vector_field,
+           message: "Field '#{parent_name}' is not an array_of_struct field"
+         )}
+    end
+  end
+
+  defp find_child_vector_field(struct_schema, full_name, child_name) do
+    case Enum.find(struct_schema, &(&1.name == child_name)) do
+      nil ->
+        {:error,
+         Invalid.exception(field: :vector_field, message: "Field '#{full_name}' not found")}
+
+      field ->
+        validate_nested_vector_field(field, full_name)
+    end
+  end
+
+  defp validate_nested_vector_field(field, full_name) do
+    if Field.vector_type?(field.data_type) do
+      {:ok, field, true}
+    else
+      {:error,
+       Invalid.exception(
+         field: :vector_field,
+         message: "Field '#{full_name}' is not a vector field"
+       )}
+    end
+  end
+
+  defp build_placeholder_group(vectors, field, is_nested) do
+    placeholder_type = vector_type_to_placeholder_type(field.data_type, is_nested)
     dim = field.dimension
 
     encoded_values =
@@ -1176,13 +1235,29 @@ defmodule Milvex do
        Invalid.exception(field: :vectors, message: "Failed to encode vectors: #{inspect(e)}")}
   end
 
-  defp vector_type_to_placeholder_type(:float_vector), do: :FloatVector
-  defp vector_type_to_placeholder_type(:binary_vector), do: :BinaryVector
-  defp vector_type_to_placeholder_type(:float16_vector), do: :Float16Vector
-  defp vector_type_to_placeholder_type(:bfloat16_vector), do: :BFloat16Vector
-  defp vector_type_to_placeholder_type(:sparse_float_vector), do: :SparseFloatVector
-  defp vector_type_to_placeholder_type(:int8_vector), do: :Int8Vector
-  defp vector_type_to_placeholder_type(_), do: :FloatVector
+  defp vector_type_to_placeholder_type(type, true) do
+    case type do
+      :float_vector -> :EmbListFloatVector
+      :binary_vector -> :EmbListBinaryVector
+      :float16_vector -> :EmbListFloat16Vector
+      :bfloat16_vector -> :EmbListBFloat16Vector
+      :sparse_float_vector -> :EmbListSparseFloatVector
+      :int8_vector -> :EmbListInt8Vector
+      _ -> :EmbListFloatVector
+    end
+  end
+
+  defp vector_type_to_placeholder_type(type, false) do
+    case type do
+      :float_vector -> :FloatVector
+      :binary_vector -> :BinaryVector
+      :float16_vector -> :Float16Vector
+      :bfloat16_vector -> :BFloat16Vector
+      :sparse_float_vector -> :SparseFloatVector
+      :int8_vector -> :Int8Vector
+      _ -> :FloatVector
+    end
+  end
 
   defp encode_vector(vec, :float_vector, _dim) do
     vec

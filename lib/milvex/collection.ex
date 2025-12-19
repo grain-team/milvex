@@ -83,9 +83,7 @@ defmodule Milvex.Collection do
   """
 
   alias Milvex.Collection.Dsl.Field
-  alias Milvex.Milvus.Proto.Common.KeyValuePair
   alias Milvex.Milvus.Proto.Schema.CollectionSchema
-  alias Milvex.Milvus.Proto.Schema.FieldSchema
 
   use Spark.Dsl,
     default_extensions: [
@@ -209,18 +207,18 @@ defmodule Milvex.Collection do
   @doc """
   Converts the collection DSL definition directly to a protobuf CollectionSchema.
 
+  This delegates to `to_schema/1` and then uses `Milvex.Schema.to_proto/1` to ensure
+  proper handling of struct_array_fields and other special field types.
+
   ## Example
 
       proto = Milvex.Collection.to_proto(MyApp.Movies)
   """
   @spec to_proto(module()) :: CollectionSchema.t()
   def to_proto(module) do
-    %CollectionSchema{
-      name: collection_name(module),
-      description: description(module) || "",
-      fields: Enum.map(fields(module), &field_to_proto/1),
-      enable_dynamic_field: enable_dynamic_field?(module)
-    }
+    module
+    |> to_schema()
+    |> Milvex.Schema.to_proto()
   end
 
   defp field_to_schema_field(%Field{} = field) do
@@ -232,8 +230,9 @@ defmodule Milvex.Collection do
       auto_id: field.auto_id || false,
       dimension: field.dimension,
       max_length: field.max_length,
-      element_type: field.element_type,
+      element_type: resolve_element_type(field.element_type),
       max_capacity: field.max_capacity,
+      struct_schema: field.struct_schema,
       nullable: field.nullable || false,
       is_partition_key: field.partition_key || false,
       is_clustering_key: field.clustering_key || false,
@@ -241,53 +240,10 @@ defmodule Milvex.Collection do
     }
   end
 
+  defp resolve_data_type(%Field{element_type: :struct}), do: :array_of_struct
   defp resolve_data_type(%Field{element_type: elem_type}) when not is_nil(elem_type), do: :array
   defp resolve_data_type(%Field{type: type}), do: type
 
-  defp field_to_proto(%Field{} = field) do
-    %FieldSchema{
-      name: Atom.to_string(field.name),
-      description: field.description || "",
-      data_type: data_type_to_proto(resolve_data_type(field)),
-      is_primary_key: field.is_primary_key || false,
-      autoID: field.auto_id || false,
-      type_params: build_type_params(field),
-      nullable: field.nullable || false,
-      is_partition_key: field.partition_key || false,
-      is_clustering_key: field.clustering_key || false,
-      element_type:
-        if(field.element_type, do: data_type_to_proto(field.element_type), else: :None)
-    }
-  end
-
-  defp build_type_params(field) do
-    []
-    |> maybe_add_param("dim", field.dimension)
-    |> maybe_add_param("max_length", field.max_length)
-    |> maybe_add_param("max_capacity", field.max_capacity)
-  end
-
-  defp maybe_add_param(params, _key, nil), do: params
-
-  defp maybe_add_param(params, key, value) do
-    [%KeyValuePair{key: key, value: to_string(value)} | params]
-  end
-
-  defp data_type_to_proto(:bool), do: :Bool
-  defp data_type_to_proto(:int8), do: :Int8
-  defp data_type_to_proto(:int16), do: :Int16
-  defp data_type_to_proto(:int32), do: :Int32
-  defp data_type_to_proto(:int64), do: :Int64
-  defp data_type_to_proto(:float), do: :Float
-  defp data_type_to_proto(:double), do: :Double
-  defp data_type_to_proto(:varchar), do: :VarChar
-  defp data_type_to_proto(:json), do: :JSON
-  defp data_type_to_proto(:text), do: :Text
-  defp data_type_to_proto(:array), do: :Array
-  defp data_type_to_proto(:binary_vector), do: :BinaryVector
-  defp data_type_to_proto(:float_vector), do: :FloatVector
-  defp data_type_to_proto(:float16_vector), do: :Float16Vector
-  defp data_type_to_proto(:bfloat16_vector), do: :BFloat16Vector
-  defp data_type_to_proto(:sparse_float_vector), do: :SparseFloatVector
-  defp data_type_to_proto(:int8_vector), do: :Int8Vector
+  defp resolve_element_type(:struct), do: nil
+  defp resolve_element_type(elem_type), do: elem_type
 end

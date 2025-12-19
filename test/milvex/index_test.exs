@@ -268,7 +268,15 @@ defmodule Milvex.IndexTest do
     end
 
     test "converts all metric types correctly" do
-      metrics = [l2: "L2", ip: "IP", cosine: "COSINE", hamming: "HAMMING", jaccard: "JACCARD"]
+      metrics = [
+        l2: "L2",
+        ip: "IP",
+        cosine: "COSINE",
+        hamming: "HAMMING",
+        jaccard: "JACCARD",
+        max_sim_cosine: "MAX_SIM_COSINE",
+        max_sim_ip: "MAX_SIM_IP"
+      ]
 
       for {atom, string} <- metrics do
         index = Index.flat("embedding", atom)
@@ -321,6 +329,21 @@ defmodule Milvex.IndexTest do
       assert :l2 in types
       assert :ip in types
       assert :cosine in types
+      assert :max_sim_cosine in types
+      assert :max_sim_ip in types
+    end
+  end
+
+  describe "max_sim metrics" do
+    test "supports max_sim_cosine for array of struct" do
+      index = Index.hnsw("sentences[embedding]", :max_sim_cosine)
+      assert index.metric_type == :max_sim_cosine
+      assert index.field_name == "sentences[embedding]"
+    end
+
+    test "supports max_sim_ip for array of struct" do
+      index = Index.hnsw("sentences[embedding]", :max_sim_ip)
+      assert index.metric_type == :max_sim_ip
     end
   end
 end

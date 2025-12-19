@@ -24,6 +24,7 @@ defmodule Milvex.Schema.Field do
 
   alias Milvex.Milvus.Proto.Common.KeyValuePair
   alias Milvex.Milvus.Proto.Schema.FieldSchema
+  alias Milvex.Milvus.Proto.Schema.StructArrayFieldSchema
 
   @scalar_types [:bool, :int8, :int16, :int32, :int64, :float, :double, :varchar, :json, :text]
   @vector_types [
@@ -34,7 +35,8 @@ defmodule Milvex.Schema.Field do
     :sparse_float_vector,
     :int8_vector
   ]
-  @all_types @scalar_types ++ @vector_types ++ [:array]
+  @complex_types [:array, :struct, :array_of_struct]
+  @all_types @scalar_types ++ @vector_types ++ @complex_types
 
   @type data_type ::
           :bool
@@ -48,6 +50,8 @@ defmodule Milvex.Schema.Field do
           | :json
           | :text
           | :array
+          | :struct
+          | :array_of_struct
           | :binary_vector
           | :float_vector
           | :float16_vector
@@ -68,7 +72,8 @@ defmodule Milvex.Schema.Field do
           nullable: boolean(),
           is_partition_key: boolean(),
           is_clustering_key: boolean(),
-          default_value: term() | nil
+          default_value: term() | nil,
+          struct_schema: [t()] | nil
         }
 
   defstruct [
@@ -80,6 +85,7 @@ defmodule Milvex.Schema.Field do
     :element_type,
     :max_capacity,
     :default_value,
+    :struct_schema,
     is_primary_key: false,
     auto_id: false,
     nullable: false,
@@ -166,7 +172,7 @@ defmodule Milvex.Schema.Field do
   Sets the element type for array fields.
   """
   @spec element_type(t(), data_type()) :: t()
-  def element_type(%__MODULE__{} = field, type) when type in @scalar_types do
+  def element_type(%__MODULE__{} = field, type) when type in @scalar_types or type == :struct do
     %{field | element_type: type}
   end
 
@@ -367,27 +373,81 @@ defmodule Milvex.Schema.Field do
     - `:max_capacity` - Maximum number of elements (required)
     - `:nullable` - Allow null values (default: false)
     - `:description` - Field description
+    - `:struct_schema` - Required when element_type is :struct, list of Field.t()
+    - `:max_length` - For varchar element types
 
   ## Examples
 
+      # Array of scalars
       Field.array("tags", :varchar, max_capacity: 100, max_length: 64)
+
+      # Array of structs
+      struct_fields = [
+        Field.varchar("text", 4096),
+        Field.vector("embedding", 1024)
+      ]
+      Field.array("sentences", :struct, max_capacity: 50, struct_schema: struct_fields)
   """
   @spec array(String.t(), data_type(), keyword()) :: t()
-  def array(name, elem_type, opts \\ []) when elem_type in @scalar_types do
+  def array(name, elem_type, opts \\ [])
+      when elem_type in @scalar_types or elem_type == :struct do
     cap = Keyword.fetch!(opts, :max_capacity)
 
+    data_type = if elem_type == :struct, do: :array_of_struct, else: :array
+
     field =
-      new(name, :array)
+      new(name, data_type)
       |> element_type(elem_type)
       |> max_capacity(cap)
       |> nullable(Keyword.get(opts, :nullable, false))
 
     field =
-      if elem_type == :varchar do
-        max_length(field, Keyword.get(opts, :max_length, 256))
-      else
-        field
+      cond do
+        elem_type == :varchar ->
+          max_length(field, Keyword.get(opts, :max_length, 256))
+
+        elem_type == :struct ->
+          struct_schema = Keyword.fetch!(opts, :struct_schema)
+          %{field | struct_schema: struct_schema}
+
+        true ->
+          field
       end
+
+    if desc = Keyword.get(opts, :description) do
+      description(field, desc)
+    else
+      field
+    end
+  end
+
+  @doc """
+  Creates a struct field with nested fields.
+
+  Struct fields are typically used as the element type for array_of_struct fields.
+
+  ## Options
+    - `:fields` - List of Field.t() defining the struct schema (required)
+    - `:description` - Field description
+
+  ## Examples
+
+      struct_fields = [
+        Field.varchar("text", 4096),
+        Field.vector("embedding", 1024),
+        Field.varchar("speaker_id", 36)
+      ]
+      Field.struct("sentence", fields: struct_fields)
+  """
+  @spec struct(String.t(), keyword()) :: t()
+  def struct(name, opts \\ []) do
+    fields = Keyword.fetch!(opts, :fields)
+
+    field = %__MODULE__{
+      name: if(is_atom(name), do: Atom.to_string(name), else: name),
+      data_type: :struct,
+      struct_schema: fields
+    }
 
     if desc = Keyword.get(opts, :description) do
       description(field, desc)
@@ -487,6 +547,30 @@ defmodule Milvex.Schema.Field do
 
       cap < 1 ->
         {:error, invalid_error(:max_capacity, "must be a positive integer")}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp validate_array_config(%{
+         data_type: :array_of_struct,
+         element_type: elem_type,
+         max_capacity: cap,
+         struct_schema: struct_schema
+       }) do
+    cond do
+      is_nil(elem_type) or elem_type != :struct ->
+        {:error, invalid_error(:element_type, "must be :struct for array_of_struct fields")}
+
+      is_nil(cap) ->
+        {:error, invalid_error(:max_capacity, "is required for array_of_struct fields")}
+
+      cap < 1 ->
+        {:error, invalid_error(:max_capacity, "must be a positive integer")}
+
+      is_nil(struct_schema) or struct_schema == [] ->
+        {:error, invalid_error(:struct_schema, "is required for array_of_struct fields")}
 
       true ->
         :ok
@@ -594,6 +678,8 @@ defmodule Milvex.Schema.Field do
   defp data_type_to_proto(:json), do: :JSON
   defp data_type_to_proto(:text), do: :Text
   defp data_type_to_proto(:array), do: :Array
+  defp data_type_to_proto(:struct), do: :Struct
+  defp data_type_to_proto(:array_of_struct), do: :ArrayOfStruct
   defp data_type_to_proto(:binary_vector), do: :BinaryVector
   defp data_type_to_proto(:float_vector), do: :FloatVector
   defp data_type_to_proto(:float16_vector), do: :Float16Vector
@@ -612,6 +698,8 @@ defmodule Milvex.Schema.Field do
   defp data_type_from_proto(:JSON), do: :json
   defp data_type_from_proto(:Text), do: :text
   defp data_type_from_proto(:Array), do: :array
+  defp data_type_from_proto(:Struct), do: :struct
+  defp data_type_from_proto(:ArrayOfStruct), do: :array_of_struct
   defp data_type_from_proto(:BinaryVector), do: :binary_vector
   defp data_type_from_proto(:FloatVector), do: :float_vector
   defp data_type_from_proto(:Float16Vector), do: :float16_vector
@@ -649,4 +737,127 @@ defmodule Milvex.Schema.Field do
   """
   @spec scalar_type?(data_type()) :: boolean()
   def scalar_type?(type), do: type in @scalar_types
+
+  @doc """
+  Checks if the field is an array of struct type.
+  """
+  @spec array_of_struct?(t()) :: boolean()
+  def array_of_struct?(%__MODULE__{data_type: :array_of_struct}), do: true
+  def array_of_struct?(_), do: false
+
+  @doc """
+  Checks if the field is a struct type.
+  """
+  @spec struct?(t()) :: boolean()
+  def struct?(%__MODULE__{data_type: :struct}), do: true
+  def struct?(_), do: false
+
+  @doc """
+  Converts an array_of_struct field to a StructArrayFieldSchema proto.
+
+  Used for the `struct_array_fields` in CollectionSchema.
+
+  Nested fields are wrapped as Array (for scalars) or ArrayOfVector (for vectors)
+  as required by Milvus's StructArrayFieldSchema format.
+  """
+  @spec to_struct_array_field_schema(t()) :: StructArrayFieldSchema.t()
+  def to_struct_array_field_schema(%__MODULE__{data_type: :array_of_struct} = field) do
+    max_cap = field.max_capacity
+
+    %StructArrayFieldSchema{
+      name: field.name,
+      description: field.description || "",
+      fields: Enum.map(field.struct_schema, &to_nested_struct_field_proto(&1, max_cap)),
+      type_params: build_type_params(field)
+    }
+  end
+
+  defp to_nested_struct_field_proto(%__MODULE__{data_type: type} = field, max_capacity)
+       when type in @vector_types do
+    type_params = build_nested_type_params(field, max_capacity)
+
+    %FieldSchema{
+      name: field.name,
+      description: field.description || "",
+      data_type: :ArrayOfVector,
+      is_primary_key: false,
+      autoID: false,
+      type_params: type_params,
+      nullable: field.nullable,
+      is_partition_key: false,
+      is_clustering_key: false,
+      element_type: data_type_to_proto(type)
+    }
+  end
+
+  defp to_nested_struct_field_proto(%__MODULE__{} = field, max_capacity) do
+    type_params = build_nested_type_params(field, max_capacity)
+
+    %FieldSchema{
+      name: field.name,
+      description: field.description || "",
+      data_type: :Array,
+      is_primary_key: false,
+      autoID: false,
+      type_params: type_params,
+      nullable: field.nullable,
+      is_partition_key: false,
+      is_clustering_key: false,
+      element_type: data_type_to_proto(field.data_type)
+    }
+  end
+
+  defp build_nested_type_params(field, max_capacity) do
+    []
+    |> maybe_add_param("dim", field.dimension)
+    |> maybe_add_param("max_length", field.max_length)
+    |> maybe_add_param("max_capacity", max_capacity)
+  end
+
+  @doc """
+  Creates a Field from a StructArrayFieldSchema proto.
+  """
+  @spec from_struct_array_field_schema(StructArrayFieldSchema.t()) :: t()
+  def from_struct_array_field_schema(%StructArrayFieldSchema{} = proto) do
+    type_params = parse_type_params(proto.type_params)
+
+    %__MODULE__{
+      name: proto.name,
+      description: if(proto.description == "", do: nil, else: proto.description),
+      data_type: :array_of_struct,
+      element_type: :struct,
+      max_capacity: type_params[:max_capacity],
+      struct_schema: Enum.map(proto.fields, &from_nested_struct_field_proto/1)
+    }
+  end
+
+  defp from_nested_struct_field_proto(%FieldSchema{data_type: :ArrayOfVector} = proto) do
+    type_params = parse_type_params(proto.type_params)
+    data_type = data_type_from_proto(proto.element_type)
+
+    %__MODULE__{
+      name: proto.name,
+      description: if(proto.description == "", do: nil, else: proto.description),
+      data_type: data_type,
+      dimension: type_params[:dim],
+      nullable: proto.nullable
+    }
+  end
+
+  defp from_nested_struct_field_proto(%FieldSchema{data_type: :Array} = proto) do
+    type_params = parse_type_params(proto.type_params)
+    data_type = data_type_from_proto(proto.element_type)
+
+    %__MODULE__{
+      name: proto.name,
+      description: if(proto.description == "", do: nil, else: proto.description),
+      data_type: data_type,
+      max_length: type_params[:max_length],
+      nullable: proto.nullable
+    }
+  end
+
+  defp from_nested_struct_field_proto(proto) do
+    from_proto(proto)
+  end
 end

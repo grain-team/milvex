@@ -10,6 +10,7 @@ defmodule Milvex.Data.FieldData do
 
   alias Milvex.Schema.Field
 
+  alias Milvex.Milvus.Proto.Schema.ArrayArray
   alias Milvex.Milvus.Proto.Schema.BoolArray
   alias Milvex.Milvus.Proto.Schema.DoubleArray
   alias Milvex.Milvus.Proto.Schema.FieldData
@@ -20,6 +21,8 @@ defmodule Milvex.Data.FieldData do
   alias Milvex.Milvus.Proto.Schema.ScalarField
   alias Milvex.Milvus.Proto.Schema.SparseFloatArray
   alias Milvex.Milvus.Proto.Schema.StringArray
+  alias Milvex.Milvus.Proto.Schema.StructArrayField
+  alias Milvex.Milvus.Proto.Schema.VectorArray
   alias Milvex.Milvus.Proto.Schema.VectorField
 
   @doc """
@@ -40,10 +43,15 @@ defmodule Milvex.Data.FieldData do
   def to_proto(field_name, values, %Field{} = field_schema) do
     data_type = field_schema.data_type
 
-    if Field.vector_type?(data_type) do
-      build_vector_field_data(field_name, values, field_schema)
-    else
-      build_scalar_field_data(field_name, values, field_schema)
+    cond do
+      data_type == :array_of_struct ->
+        build_struct_array_field_data(field_name, values, field_schema)
+
+      Field.vector_type?(data_type) ->
+        build_vector_field_data(field_name, values, field_schema)
+
+      true ->
+        build_scalar_field_data(field_name, values, field_schema)
     end
   end
 
@@ -222,6 +230,98 @@ defmodule Milvex.Data.FieldData do
     }
   end
 
+  defp build_struct_array_field_data(field_name, values, %Field{struct_schema: struct_schema}) do
+    fields_data = encode_struct_array_columns(values, struct_schema)
+
+    struct_array = %StructArrayField{
+      fields: fields_data
+    }
+
+    %FieldData{
+      field_name: field_name,
+      type: :ArrayOfStruct,
+      field: {:struct_arrays, struct_array}
+    }
+  end
+
+  defp encode_struct_array_columns(values, struct_schema) do
+    Enum.map(struct_schema, fn field ->
+      values_per_row = extract_nested_field_values_per_row(values, field.name)
+      encode_nested_struct_field(field.name, values_per_row, field)
+    end)
+  end
+
+  defp extract_nested_field_values_per_row(rows_of_struct_arrays, field_name) do
+    Enum.map(rows_of_struct_arrays, fn
+      nil ->
+        []
+
+      struct_array when is_list(struct_array) ->
+        Enum.map(struct_array, fn struct_item ->
+          get_struct_field_value(struct_item, field_name)
+        end)
+    end)
+  end
+
+  defp get_struct_field_value(struct_item, field_name) when is_map(struct_item) do
+    field_name_str = to_string(field_name)
+
+    Enum.find_value(struct_item, fn {k, v} ->
+      if to_string(k) == field_name_str, do: v
+    end)
+  end
+
+  defp get_struct_field_value(_, _), do: nil
+
+  defp encode_nested_struct_field(
+         field_name,
+         values_per_row,
+         %Field{data_type: data_type} = field
+       )
+       when data_type in [
+              :float_vector,
+              :binary_vector,
+              :float16_vector,
+              :bfloat16_vector,
+              :sparse_float_vector,
+              :int8_vector
+            ] do
+    row_vectors =
+      Enum.map(values_per_row, fn row_values ->
+        build_vector_field(data_type, row_values, field.dimension)
+      end)
+
+    vector_array = %VectorArray{
+      dim: field.dimension,
+      data: row_vectors,
+      element_type: data_type_to_proto(data_type)
+    }
+
+    %FieldData{
+      field_name: field_name,
+      type: :ArrayOfVector,
+      field: {:vectors, %VectorField{dim: field.dimension, data: {:vector_array, vector_array}}}
+    }
+  end
+
+  defp encode_nested_struct_field(field_name, values_per_row, %Field{data_type: data_type}) do
+    row_scalars =
+      Enum.map(values_per_row, fn row_values ->
+        build_scalar_field(data_type, row_values)
+      end)
+
+    array_array = %ArrayArray{
+      data: row_scalars,
+      element_type: data_type_to_proto(data_type)
+    }
+
+    %FieldData{
+      field_name: field_name,
+      type: :Array,
+      field: {:scalars, %ScalarField{data: {:array_data, array_array}}}
+    }
+  end
+
   defp extract_values(%FieldData{field: {:scalars, scalars}}) do
     extract_scalar_values(scalars)
   end
@@ -230,7 +330,18 @@ defmodule Milvex.Data.FieldData do
     extract_vector_values(vectors)
   end
 
+  defp extract_values(%FieldData{field: {:struct_arrays, struct_arrays}}) do
+    extract_struct_array_values(struct_arrays)
+  end
+
   defp extract_values(_), do: []
+
+  defp extract_struct_array_values(%StructArrayField{fields: fields}) do
+    Enum.map(fields, fn field_data ->
+      {field_data.field_name, extract_values(field_data)}
+    end)
+    |> Map.new()
+  end
 
   defp chunk_vector(flat_list, dim) when is_integer(dim) and dim > 0 do
     Enum.chunk_every(flat_list, dim)
@@ -411,6 +522,8 @@ defmodule Milvex.Data.FieldData do
   defp data_type_to_proto(:json), do: :JSON
   defp data_type_to_proto(:text), do: :Text
   defp data_type_to_proto(:array), do: :Array
+  defp data_type_to_proto(:struct), do: :Struct
+  defp data_type_to_proto(:array_of_struct), do: :ArrayOfStruct
   defp data_type_to_proto(:binary_vector), do: :BinaryVector
   defp data_type_to_proto(:float_vector), do: :FloatVector
   defp data_type_to_proto(:float16_vector), do: :Float16Vector

@@ -287,6 +287,30 @@ defmodule Milvex.SchemaTest do
       proto = Schema.to_proto(schema)
       assert proto.description == ""
     end
+
+    test "separates struct_array_fields from regular fields" do
+      struct_fields = [
+        Field.varchar("text", 4096),
+        Field.vector("embedding", 1024)
+      ]
+
+      schema =
+        Schema.new("conversations")
+        |> Schema.add_field(Field.primary_key("id", :varchar, max_length: 64))
+        |> Schema.add_field(Field.varchar("recording_id", 36))
+        |> Schema.add_field(
+          Field.array("sentences", :struct, max_capacity: 50, struct_schema: struct_fields)
+        )
+
+      proto = Schema.to_proto(schema)
+
+      assert length(proto.fields) == 2
+      assert length(proto.struct_array_fields) == 1
+
+      [struct_array_field] = proto.struct_array_fields
+      assert struct_array_field.name == "sentences"
+      assert length(struct_array_field.fields) == 2
+    end
   end
 
   describe "from_proto/1" do
@@ -404,6 +428,22 @@ defmodule Milvex.SchemaTest do
     test "field_names/1 returns all field names", %{schema: schema} do
       names = Schema.field_names(schema)
       assert names == ["id", "title", "year", "embedding", "image_embedding"]
+    end
+
+    test "struct_array_fields/1 returns array_of_struct fields" do
+      struct_fields = [Field.varchar("text", 4096)]
+
+      schema =
+        Schema.new("test")
+        |> Schema.add_field(Field.primary_key("id", :int64))
+        |> Schema.add_field(
+          Field.array("sentences", :struct, max_capacity: 50, struct_schema: struct_fields)
+        )
+        |> Schema.add_field(Field.array("tags", :varchar, max_capacity: 10, max_length: 64))
+
+      struct_arrays = Schema.struct_array_fields(schema)
+      assert length(struct_arrays) == 1
+      assert hd(struct_arrays).name == "sentences"
     end
   end
 

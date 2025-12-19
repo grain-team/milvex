@@ -274,13 +274,20 @@ defmodule Milvex.Schema do
 
   @doc """
   Converts the schema to a protobuf CollectionSchema struct.
+
+  Splits fields into regular fields and struct_array_fields as required
+  by the Milvus proto schema.
   """
   @spec to_proto(t()) :: CollectionSchema.t()
   def to_proto(%__MODULE__{} = schema) do
+    {regular_fields, struct_array_fields} =
+      Enum.split_with(schema.fields, fn f -> f.data_type != :array_of_struct end)
+
     %CollectionSchema{
       name: schema.name,
       description: schema.description || "",
-      fields: Enum.map(schema.fields, &Field.to_proto/1),
+      fields: Enum.map(regular_fields, &Field.to_proto/1),
+      struct_array_fields: Enum.map(struct_array_fields, &Field.to_struct_array_field_schema/1),
       enable_dynamic_field: schema.enable_dynamic_field
     }
   end
@@ -289,15 +296,22 @@ defmodule Milvex.Schema do
   Creates a Schema from a protobuf CollectionSchema struct.
 
   Returns `nil` if the input is `nil`.
+  Combines regular fields and struct_array_fields into a single fields list.
   """
   @spec from_proto(CollectionSchema.t() | nil) :: t() | nil
   def from_proto(nil), do: nil
 
   def from_proto(%CollectionSchema{} = proto) do
+    regular_fields = Enum.map(proto.fields, &Field.from_proto/1)
+
+    struct_array_fields =
+      (proto.struct_array_fields || [])
+      |> Enum.map(&Field.from_struct_array_field_schema/1)
+
     %__MODULE__{
       name: proto.name,
       description: if(proto.description == "", do: nil, else: proto.description),
-      fields: Enum.map(proto.fields, &Field.from_proto/1),
+      fields: regular_fields ++ struct_array_fields,
       enable_dynamic_field: proto.enable_dynamic_field
     }
   end
@@ -348,5 +362,13 @@ defmodule Milvex.Schema do
   @spec field_names(t()) :: [String.t()]
   def field_names(%__MODULE__{fields: fields}) do
     Enum.map(fields, & &1.name)
+  end
+
+  @doc """
+  Returns all array_of_struct fields from the schema.
+  """
+  @spec struct_array_fields(t()) :: [Field.t()]
+  def struct_array_fields(%__MODULE__{fields: fields}) do
+    Enum.filter(fields, &Field.array_of_struct?/1)
   end
 end

@@ -6,6 +6,7 @@ defmodule Milvex.Collection.Verifiers.ValidateArrayConfig do
   - A valid element_type
   - A positive max_capacity
   - max_length if element_type is :varchar
+  - struct_schema if element_type is :struct
   """
 
   use Spark.Dsl.Verifier
@@ -29,41 +30,63 @@ defmodule Milvex.Collection.Verifiers.ValidateArrayConfig do
   defp array_field?(%{element_type: elem_type}) when not is_nil(elem_type), do: true
   defp array_field?(_), do: false
 
-  defp validate_array(
-         %{element_type: elem_type, max_capacity: cap, max_length: len, name: name},
-         module
-       ) do
-    errors = []
-
-    errors =
-      if is_nil(cap) or cap < 1 do
-        [
-          Spark.Error.DslError.exception(
-            message: "Array field #{inspect(name)} requires a positive max_capacity",
-            path: [:collection, :fields, name],
-            module: module
-          )
-          | errors
-        ]
-      else
-        errors
-      end
-
-    errors =
-      if elem_type == :varchar and (is_nil(len) or len < 1 or len > 65_535) do
-        [
-          Spark.Error.DslError.exception(
-            message:
-              "Array field #{inspect(name)} with varchar elements requires max_length between 1 and 65535",
-            path: [:collection, :fields, name],
-            module: module
-          )
-          | errors
-        ]
-      else
-        errors
-      end
-
-    errors
+  defp validate_array(field, module) do
+    []
+    |> validate_max_capacity(field, module)
+    |> validate_varchar_max_length(field, module)
+    |> validate_struct_schema(field, module)
   end
+
+  defp validate_max_capacity(errors, %{max_capacity: cap, name: name}, module)
+       when is_nil(cap) or cap < 1 do
+    [
+      Spark.Error.DslError.exception(
+        message: "Array field #{inspect(name)} requires a positive max_capacity",
+        path: [:collection, :fields, name],
+        module: module
+      )
+      | errors
+    ]
+  end
+
+  defp validate_max_capacity(errors, _, _), do: errors
+
+  defp validate_varchar_max_length(
+         errors,
+         %{element_type: :varchar, max_length: len, name: name},
+         module
+       )
+       when is_nil(len) or len < 1 or len > 65_535 do
+    [
+      Spark.Error.DslError.exception(
+        message:
+          "Array field #{inspect(name)} with varchar elements requires max_length between 1 and 65535",
+        path: [:collection, :fields, name],
+        module: module
+      )
+      | errors
+    ]
+  end
+
+  defp validate_varchar_max_length(errors, _, _), do: errors
+
+  defp validate_struct_schema(errors, %{element_type: :struct, name: name} = field, module) do
+    struct_schema = Map.get(field, :struct_schema)
+
+    if is_nil(struct_schema) or struct_schema == [] do
+      [
+        Spark.Error.DslError.exception(
+          message:
+            "Array field #{inspect(name)} with struct elements requires a non-empty struct_schema",
+          path: [:collection, :fields, name],
+          module: module
+        )
+        | errors
+      ]
+    else
+      errors
+    end
+  end
+
+  defp validate_struct_schema(errors, _, _), do: errors
 end

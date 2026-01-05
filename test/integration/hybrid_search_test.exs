@@ -105,7 +105,7 @@ defmodule Milvex.Integration.HybridSearchTest do
 
       for hit <- List.flatten(results.hits) do
         if hit.fields["title"] do
-          assert String.starts_with?(hit.fields["title"], "Red") or true
+          assert String.starts_with?(hit.fields["title"], "Red")
         end
       end
     end

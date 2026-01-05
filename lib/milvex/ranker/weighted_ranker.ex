@@ -6,7 +6,7 @@ defmodule Milvex.Ranker.WeightedRanker do
   """
 
   @type t :: %__MODULE__{
-          weights: [float()]
+          weights: [number()]
         }
 
   defstruct [:weights]

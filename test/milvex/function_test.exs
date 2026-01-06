@@ -79,16 +79,30 @@ defmodule Milvex.FunctionTest do
       assert func.output_field_names == ["sparse"]
     end
 
-    test "accepts multiple input fields" do
-      func = Function.bm25("bm25_fn", input: ["title", "content"], output: "sparse")
-      assert func.input_field_names == ["title", "content"]
-      assert func.output_field_names == ["sparse"]
+    test "raises when multiple input fields are provided" do
+      assert_raise ArgumentError,
+                   ~r/BM25 functions only support a single input field/,
+                   fn ->
+                     Function.bm25("bm25_fn", input: ["title", "content"], output: "sparse")
+                   end
     end
 
-    test "accepts multiple output fields" do
-      func = Function.bm25("bm25_fn", input: "content", output: ["sparse1", "sparse2"])
+    test "raises when multiple output fields are provided" do
+      assert_raise ArgumentError,
+                   ~r/BM25 functions only support a single output field/,
+                   fn ->
+                     Function.bm25("bm25_fn", input: "content", output: ["sparse1", "sparse2"])
+                   end
+    end
+
+    test "accepts single-element list for input" do
+      func = Function.bm25("bm25_fn", input: ["content"], output: "sparse")
       assert func.input_field_names == ["content"]
-      assert func.output_field_names == ["sparse1", "sparse2"]
+    end
+
+    test "accepts single-element list for output" do
+      func = Function.bm25("bm25_fn", input: "content", output: ["sparse"])
+      assert func.output_field_names == ["sparse"]
     end
 
     test "raises when input is missing" do
@@ -191,7 +205,7 @@ defmodule Milvex.FunctionTest do
     end
 
     test "roundtrip conversion preserves data" do
-      original = Function.bm25("bm25_fn", input: ["title", "content"], output: "sparse")
+      original = Function.bm25("bm25_fn", input: "content", output: "sparse")
       proto = Function.to_proto(original)
       restored = Function.from_proto(proto)
 

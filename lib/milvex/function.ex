@@ -88,26 +88,48 @@ defmodule Milvex.Function do
 
   BM25 converts text fields to sparse vector embeddings for full-text search.
 
+  Note: Milvus BM25 functions only support a single input field and a single
+  output field. If you need to search multiple text fields, create separate
+  BM25 functions for each field with their own sparse vector output fields,
+  then use hybrid search to combine the results.
+
   ## Options
-    - `:input` - Input field name (required)
-    - `:output` - Output field name (required)
+    - `:input` - Input field name (required, single VARCHAR field)
+    - `:output` - Output field name (required, single SPARSE_FLOAT_VECTOR field)
 
   ## Examples
 
       Function.bm25("bm25_fn", input: "content", output: "sparse")
-      Function.bm25("bm25_fn", input: ["title", "content"], output: "sparse")
+
+      # For multiple text fields, create separate functions:
+      Function.bm25("title_bm25", input: "title", output: "title_sparse")
+      Function.bm25("content_bm25", input: "content", output: "content_sparse")
   """
   @spec bm25(String.t(), keyword()) :: t()
   def bm25(name, opts) when is_binary(name) do
     input = Keyword.fetch!(opts, :input)
     output = Keyword.fetch!(opts, :output)
 
-    input_fields = if is_list(input), do: input, else: [input]
-    output_fields = if is_list(output), do: output, else: [output]
+    validate_single_field!(:input, input)
+    validate_single_field!(:output, output)
 
     new(name, :BM25)
-    |> input_field_names(input_fields)
-    |> output_field_names(output_fields)
+    |> input_field_names([to_string(input)])
+    |> output_field_names([to_string(output)])
+  end
+
+  defp validate_single_field!(field_type, value) when is_list(value) and length(value) > 1 do
+    raise ArgumentError,
+          "BM25 functions only support a single #{field_type} field, got #{length(value)} fields: #{inspect(value)}. " <>
+            "Create separate BM25 functions for each field instead."
+  end
+
+  defp validate_single_field!(field_type, [single]) do
+    validate_single_field!(field_type, single)
+  end
+
+  defp validate_single_field!(_field_type, value) when is_binary(value) or is_atom(value) do
+    :ok
   end
 
   @doc """

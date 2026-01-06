@@ -587,12 +587,15 @@ defmodule Milvex.SchemaTest do
 
     test "roundtrip with functions preserves all function data" do
       func1 = Milvex.Function.bm25("bm25_fn1", input: "content", output: "sparse1")
-      func2 = Milvex.Function.bm25("bm25_fn2", input: ["title", "desc"], output: "sparse2")
+      func2 = Milvex.Function.bm25("bm25_fn2", input: "title", output: "sparse2")
 
       original =
         Schema.new("docs")
         |> Schema.add_field(Field.primary_key("id", :int64))
         |> Schema.add_field(Field.varchar("content", 4096))
+        |> Schema.add_field(Field.varchar("title", 256))
+        |> Schema.add_field(Field.sparse_vector("sparse1"))
+        |> Schema.add_field(Field.sparse_vector("sparse2"))
         |> Schema.add_function(func1)
         |> Schema.add_function(func2)
 

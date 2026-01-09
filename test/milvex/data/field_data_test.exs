@@ -153,7 +153,10 @@ defmodule Milvex.Data.FieldDataTest do
     end
 
     test "extracts timestamp values from string data" do
-      scalar = %ScalarField{data: {:string_data, %StringArray{data: ["2025-01-01T00:00:00Z", "2025-06-15T12:30:45Z"]}}}
+      scalar = %ScalarField{
+        data: {:string_data, %StringArray{data: ["2025-01-01T00:00:00Z", "2025-06-15T12:30:45Z"]}}
+      }
+
       [s1, s2] = FieldData.extract_scalar_values(scalar)
       assert s1 == "2025-01-01T00:00:00Z"
       assert s2 == "2025-06-15T12:30:45Z"

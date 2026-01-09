@@ -20,7 +20,19 @@ defmodule Milvex.Schema.FieldTest do
     end
 
     test "supports all scalar types" do
-      for type <- [:bool, :int8, :int16, :int32, :int64, :float, :double, :varchar, :json, :text, :timestamp] do
+      for type <- [
+            :bool,
+            :int8,
+            :int16,
+            :int32,
+            :int64,
+            :float,
+            :double,
+            :varchar,
+            :json,
+            :text,
+            :timestamp
+          ] do
         field = Field.new("test", type)
         assert field.data_type == type
       end

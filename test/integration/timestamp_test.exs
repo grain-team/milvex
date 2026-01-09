@@ -45,8 +45,18 @@ defmodule Milvex.Integration.TimestampTest do
       :ok = Milvex.create_collection(conn, name, schema)
 
       rows = [
-        %{id: 1, title: "Item 1", created_at: ~U[2025-01-01 00:00:00Z], embedding: random_vector(4)},
-        %{id: 2, title: "Item 2", created_at: ~U[2025-06-15 12:30:00Z], embedding: random_vector(4)}
+        %{
+          id: 1,
+          title: "Item 1",
+          created_at: ~U[2025-01-01 00:00:00Z],
+          embedding: random_vector(4)
+        },
+        %{
+          id: 2,
+          title: "Item 2",
+          created_at: ~U[2025-06-15 12:30:00Z],
+          embedding: random_vector(4)
+        }
       ]
 
       assert {:ok, result} = Milvex.insert(conn, name, rows)
@@ -72,8 +82,18 @@ defmodule Milvex.Integration.TimestampTest do
       :ok = Milvex.create_collection(conn, name, schema)
 
       rows = [
-        %{id: 1, title: "Item 1", created_at: "2025-01-01T00:00:00Z", embedding: random_vector(4)},
-        %{id: 2, title: "Item 2", created_at: "2025-05-01T23:59:59+08:00", embedding: random_vector(4)}
+        %{
+          id: 1,
+          title: "Item 1",
+          created_at: "2025-01-01T00:00:00Z",
+          embedding: random_vector(4)
+        },
+        %{
+          id: 2,
+          title: "Item 2",
+          created_at: "2025-05-01T23:59:59+08:00",
+          embedding: random_vector(4)
+        }
       ]
 
       assert {:ok, result} = Milvex.insert(conn, name, rows)
@@ -151,9 +171,24 @@ defmodule Milvex.Integration.TimestampTest do
         )
 
       rows = [
-        %{id: 1, title: "Old Item", created_at: ~U[2024-01-01 00:00:00Z], embedding: random_vector(4)},
-        %{id: 2, title: "Recent Item", created_at: ~U[2025-06-01 00:00:00Z], embedding: random_vector(4)},
-        %{id: 3, title: "New Item", created_at: ~U[2025-12-01 00:00:00Z], embedding: random_vector(4)}
+        %{
+          id: 1,
+          title: "Old Item",
+          created_at: ~U[2024-01-01 00:00:00Z],
+          embedding: random_vector(4)
+        },
+        %{
+          id: 2,
+          title: "Recent Item",
+          created_at: ~U[2025-06-01 00:00:00Z],
+          embedding: random_vector(4)
+        },
+        %{
+          id: 3,
+          title: "New Item",
+          created_at: ~U[2025-12-01 00:00:00Z],
+          embedding: random_vector(4)
+        }
       ]
 
       {:ok, _} = Milvex.insert(conn, name, rows)
@@ -193,7 +228,12 @@ defmodule Milvex.Integration.TimestampTest do
       :ok = Milvex.create_collection(conn, name, schema)
 
       rows = [
-        %{id: 1, title: "With timestamp", updated_at: ~U[2025-01-01 00:00:00Z], embedding: random_vector(4)},
+        %{
+          id: 1,
+          title: "With timestamp",
+          updated_at: ~U[2025-01-01 00:00:00Z],
+          embedding: random_vector(4)
+        },
         %{id: 2, title: "Without timestamp", updated_at: nil, embedding: random_vector(4)}
       ]
 
@@ -226,9 +266,24 @@ defmodule Milvex.Integration.TimestampTest do
         )
 
       rows = [
-        %{id: 1, title: "Item 1", created_at: ~U[2024-01-01 00:00:00Z], embedding: [1.0, 0.0, 0.0, 0.0]},
-        %{id: 2, title: "Item 2", created_at: ~U[2025-06-01 00:00:00Z], embedding: [0.9, 0.1, 0.0, 0.0]},
-        %{id: 3, title: "Item 3", created_at: ~U[2025-12-01 00:00:00Z], embedding: [0.8, 0.2, 0.0, 0.0]}
+        %{
+          id: 1,
+          title: "Item 1",
+          created_at: ~U[2024-01-01 00:00:00Z],
+          embedding: [1.0, 0.0, 0.0, 0.0]
+        },
+        %{
+          id: 2,
+          title: "Item 2",
+          created_at: ~U[2025-06-01 00:00:00Z],
+          embedding: [0.9, 0.1, 0.0, 0.0]
+        },
+        %{
+          id: 3,
+          title: "Item 3",
+          created_at: ~U[2025-12-01 00:00:00Z],
+          embedding: [0.8, 0.2, 0.0, 0.0]
+        }
       ]
 
       {:ok, _} = Milvex.insert(conn, name, rows)

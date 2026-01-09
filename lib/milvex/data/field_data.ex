@@ -226,7 +226,10 @@ defmodule Milvex.Data.FieldData do
     end
   end
 
-  defp build_scalar_field_data(field_name, values, %Field{data_type: data_type, nullable: nullable}) do
+  defp build_scalar_field_data(field_name, values, %Field{
+         data_type: data_type,
+         nullable: nullable
+       }) do
     has_nils = Enum.any?(values, &is_nil/1)
 
     {non_nil_values, valid_data} =

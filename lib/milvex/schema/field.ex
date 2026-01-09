@@ -26,7 +26,19 @@ defmodule Milvex.Schema.Field do
   alias Milvex.Milvus.Proto.Schema.FieldSchema
   alias Milvex.Milvus.Proto.Schema.StructArrayFieldSchema
 
-  @scalar_types [:bool, :int8, :int16, :int32, :int64, :float, :double, :varchar, :json, :text, :timestamp]
+  @scalar_types [
+    :bool,
+    :int8,
+    :int16,
+    :int32,
+    :int64,
+    :float,
+    :double,
+    :varchar,
+    :json,
+    :text,
+    :timestamp
+  ]
   @vector_types [
     :binary_vector,
     :float_vector,

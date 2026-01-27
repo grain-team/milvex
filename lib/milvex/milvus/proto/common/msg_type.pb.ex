@@ -124,4 +124,12 @@ defmodule Milvex.Milvus.Proto.Common.MsgType do
   field :DescribeDatabase, 1805
   field :AddCollectionField, 1900
   field :AlterWAL, 2000
+  field :CreateSnapshot, 2100
+  field :DropSnapshot, 2101
+  field :ListSnapshots, 2102
+  field :DescribeSnapshot, 2103
+  field :RestoreSnapshot, 2104
+  field :GetRestoreSnapshotState, 2105
+  field :ListRestoreSnapshotJobs, 2106
+  field :AlterCollectionSchema, 2200
 end

@@ -1,5 +1,5 @@
 defmodule Milvex.Milvus.Proto.Msg.ReplicateMsg do
-  use Protobuf, protoc_gen_elixir_version: "0.15.0", syntax: :proto3
+  use Protobuf, deprecated: true, protoc_gen_elixir_version: "0.15.0", syntax: :proto3
 
   field :base, 1, type: Milvex.Milvus.Proto.Common.MsgBase
   field :is_end, 2, type: :bool, json_name: "isEnd"

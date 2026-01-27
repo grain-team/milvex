@@ -10,9 +10,11 @@ defmodule Milvex.Milvus.Proto.Milvus.FlushAllResponse do
     json_name: "flushResults",
     deprecated: true
 
-  field :flush_all_tss, 4,
+  field :flush_all_msgs, 4,
     repeated: true,
-    type: Milvex.Milvus.Proto.Milvus.FlushAllResponse.FlushAllTssEntry,
-    json_name: "flushAllTss",
+    type: Milvex.Milvus.Proto.Milvus.FlushAllResponse.FlushAllMsgsEntry,
+    json_name: "flushAllMsgs",
     map: true
+
+  field :cluster_info, 5, type: Milvex.Milvus.Proto.Milvus.ClusterInfo, json_name: "clusterInfo"
 end

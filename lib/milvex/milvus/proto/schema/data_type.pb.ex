@@ -21,6 +21,7 @@ defmodule Milvex.Milvus.Proto.Schema.DataType do
   field :Geometry, 24
   field :Text, 25
   field :Timestamptz, 26
+  field :Mol, 27
   field :BinaryVector, 100
   field :FloatVector, 101
   field :Float16Vector, 102

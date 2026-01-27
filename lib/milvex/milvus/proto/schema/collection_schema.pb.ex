@@ -23,4 +23,7 @@ defmodule Milvex.Milvus.Proto.Schema.CollectionSchema do
   field :version, 10, type: :int32
   field :external_source, 11, type: :string, json_name: "externalSource"
   field :external_spec, 12, type: :string, json_name: "externalSpec"
+  field :do_physical_backfill, 13, type: :bool, json_name: "doPhysicalBackfill"
+  field :file_resource_ids, 14, repeated: true, type: :int64, json_name: "fileResourceIds"
+  field :enable_namespace, 15, type: :bool, json_name: "enableNamespace"
 end

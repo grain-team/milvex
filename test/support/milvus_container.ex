@@ -14,11 +14,13 @@ defmodule Milvex.MilvusContainer do
   @milvus_image "milvusdb/milvus:v2.6.6"
 
   @grpc_port 19_530
+  @network_prefix "milvex-test-"
 
   defstruct [:network_id, :network_name, :etcd, :minio, :milvus]
 
   def start do
     with {:ok, _} <- Testcontainers.start_link(),
+         :ok <- cleanup_orphaned_networks(),
          {:ok, network_id, network_name} <- create_network(),
          {:ok, etcd} <- start_etcd(network_id),
          etcd_ip <- get_container_ip(etcd.container_id, network_name),
@@ -50,9 +52,27 @@ defmodule Milvex.MilvusContainer do
     [host: host, port: port]
   end
 
+  defp cleanup_orphaned_networks do
+    conn = get_docker_connection()
+
+    case NetworkApi.network_list(conn) do
+      {:ok, networks} ->
+        networks
+        |> Enum.filter(&String.starts_with?(Map.get(&1, :Name, ""), @network_prefix))
+        |> Enum.each(fn network ->
+          NetworkApi.network_delete(conn, Map.get(network, :Id))
+        end)
+
+        :ok
+
+      _ ->
+        :ok
+    end
+  end
+
   defp create_network do
     conn = get_docker_connection()
-    network_name = "milvex-test-#{:erlang.unique_integer([:positive])}"
+    network_name = "#{@network_prefix}#{:erlang.unique_integer([:positive])}"
 
     request = %NetworkCreateRequest{
       Name: network_name,
@@ -62,7 +82,6 @@ defmodule Milvex.MilvusContainer do
 
     case NetworkApi.network_create(conn, request) do
       {:ok, %{Id: id}} -> {:ok, id, network_name}
-      {:ok, %DockerEngineAPI.Model.NetworkCreateResponse{Id: id}} -> {:ok, id, network_name}
       error -> error
     end
   end

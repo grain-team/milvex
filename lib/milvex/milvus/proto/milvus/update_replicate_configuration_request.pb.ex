@@ -4,4 +4,6 @@ defmodule Milvex.Milvus.Proto.Milvus.UpdateReplicateConfigurationRequest do
   field :replicate_configuration, 1,
     type: Milvex.Milvus.Proto.Common.ReplicateConfiguration,
     json_name: "replicateConfiguration"
+
+  field :force_promote, 2, type: :bool, json_name: "forcePromote"
 end

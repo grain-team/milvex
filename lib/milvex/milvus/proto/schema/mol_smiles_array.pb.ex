@@ -1,0 +1,9 @@
+defmodule Milvex.Milvus.Proto.Schema.MolSmilesArray do
+  @moduledoc """
+  MolSmilesArray stores user-provided SMILES strings for molecular data.
+  """
+
+  use Protobuf, protoc_gen_elixir_version: "0.15.0", syntax: :proto3
+
+  field :data, 1, repeated: true, type: :string
+end

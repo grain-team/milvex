@@ -88,13 +88,20 @@ defmodule Milvex.Integration.HybridSearchTest do
     end
 
     test "applies filter expression", %{conn: conn} do
+      filter = "title like 'Red%'"
+
       {:ok, text_search} =
         AnnSearch.new("text_embedding", [[1.0, 0.0, 0.0, 0.0]],
           limit: 3,
-          expr: "title like 'Red%'"
+          expr: filter
         )
 
-      {:ok, image_search} = AnnSearch.new("image_embedding", [[0.0, 1.0, 0.0, 0.0]], limit: 3)
+      {:ok, image_search} =
+        AnnSearch.new("image_embedding", [[0.0, 1.0, 0.0, 0.0]],
+          limit: 3,
+          expr: filter
+        )
+
       {:ok, ranker} = Ranker.rrf()
 
       {:ok, results} =

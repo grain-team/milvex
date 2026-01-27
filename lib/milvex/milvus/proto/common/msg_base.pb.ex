@@ -12,5 +12,5 @@ defmodule Milvex.Milvus.Proto.Common.MsgBase do
     type: Milvex.Milvus.Proto.Common.MsgBase.PropertiesEntry,
     map: true
 
-  field :replicateInfo, 7, type: Milvex.Milvus.Proto.Common.ReplicateInfo
+  field :replicateInfo, 7, type: Milvex.Milvus.Proto.Common.ReplicateInfo, deprecated: true
 end

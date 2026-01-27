@@ -37,4 +37,9 @@ defmodule Milvex.Milvus.Proto.Schema.SearchResultData do
   field :element_indices, 15,
     type: Milvex.Milvus.Proto.Schema.LongArray,
     json_name: "elementIndices"
+
+  field :order_by_field_values, 16,
+    repeated: true,
+    type: Milvex.Milvus.Proto.Schema.FieldData,
+    json_name: "orderByFieldValues"
 end

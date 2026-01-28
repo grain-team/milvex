@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.1](https://github.com/grain-team/milvex/compare/v0.5.0...v0.5.1) (2026-01-28)
+
+
+### Features
+
+* Adds is_dynamic option to schema fields ([a1fcc2b](https://github.com/grain-team/milvex/commit/a1fcc2b9e20f39d71e5ce0a4a4b70879103fed87))
+* Adds support to timestampz fields ([8ec9106](https://github.com/grain-team/milvex/commit/8ec910646fe6f3b1794c2abd85f44fbab3c68311))
+
+
+### Bug Fixes
+
+* Adds text to allowed dynamic fields ([ebf346b](https://github.com/grain-team/milvex/commit/ebf346b3d03509d03ff7a550119150ef1f105c84))
+
 ## [0.5.0](https://github.com/grain-team/milvex/compare/v0.4.2...v0.5.0) (2026-01-06)
 
 

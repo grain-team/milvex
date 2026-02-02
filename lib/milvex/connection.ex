@@ -1,14 +1,14 @@
 defmodule Milvex.Connection do
   @moduledoc """
-  State machine managing gRPC channel lifecycle and health monitoring.
+  State machine managing gRPC channel lifecycle with automatic reconnection.
 
-  Each connection maintains a gRPC channel to a Milvus server and provides
-  health monitoring with automatic reconnection on failure.
+  Each connection maintains a gRPC channel to a Milvus server and monitors
+  the underlying connection process for failures.
 
   ## States
 
   - `:connecting` - Attempting to establish initial connection
-  - `:connected` - Channel active, health checks running
+  - `:connected` - Channel active, connection monitored
   - `:reconnecting` - Lost connection, attempting to restore
 
   ## Usage
@@ -18,9 +18,6 @@ defmodule Milvex.Connection do
 
       # Get the gRPC channel for making calls
       {:ok, channel} = Milvex.Connection.get_channel(conn)
-
-      # Perform a health check
-      :ok = Milvex.Connection.health_check(conn)
 
       # Disconnect
       :ok = Milvex.Connection.disconnect(conn)
@@ -35,15 +32,15 @@ defmodule Milvex.Connection do
 
   ## Reconnection Behavior
 
-  The connection uses exponential backoff with jitter for reconnection attempts.
-  This prevents thundering herd problems when multiple clients reconnect.
+  The connection monitors the underlying gRPC connection process. When the
+  connection dies, it automatically reconnects using exponential backoff
+  with jitter to prevent thundering herd problems.
 
   Configuration options:
   - `:reconnect_base_delay` - Base delay in ms (default: 1000)
   - `:reconnect_max_delay` - Maximum delay cap in ms (default: 60000)
   - `:reconnect_multiplier` - Exponential multiplier (default: 2.0)
   - `:reconnect_jitter` - Jitter factor 0.0-1.0 (default: 0.1)
-  - `:health_check_interval` - Health check interval in ms (default: 30000)
   """
 
   use GenStateMachine, callback_mode: [:state_functions, :state_enter]
@@ -53,15 +50,13 @@ defmodule Milvex.Connection do
   alias Milvex.Backoff
   alias Milvex.Config
   alias Milvex.Errors
-  alias Milvex.Milvus.Proto.Milvus.CheckHealthRequest
-  alias Milvex.Milvus.Proto.Milvus.MilvusService
 
-  defstruct [:config, :channel, :health_timer, retry_count: 0]
+  defstruct [:config, :channel, :conn_monitor_ref, retry_count: 0]
 
   @type t :: %__MODULE__{
           config: Config.t(),
           channel: GRPC.Channel.t() | nil,
-          health_timer: reference() | nil,
+          conn_monitor_ref: reference() | nil,
           retry_count: non_neg_integer()
         }
 
@@ -89,14 +84,16 @@ defmodule Milvex.Connection do
   end
 
   @doc """
-  Gets the gRPC channel from the connection.
+  Gets the gRPC channel and call options from the connection.
 
-  Returns `{:ok, channel}` if connected, or `{:error, error}` if not connected.
+  Returns `{:ok, channel, call_opts}` if connected, or `{:error, error}` if not connected.
+  The `call_opts` keyword list contains options to pass to gRPC calls, including `:timeout`.
   """
-  @spec get_channel(GenServer.server()) ::
+  @spec get_channel(GenServer.server(), keyword()) ::
           {:ok, GRPC.Channel.t()} | {:error, Milvex.Error.t()}
-  def get_channel(conn) do
-    GenStateMachine.call(conn, :get_channel)
+  def get_channel(conn, opts \\ []) do
+    timeout = Keyword.get(opts, :timeout, 5_000)
+    GenStateMachine.call(conn, :get_channel, timeout)
   end
 
   @doc """
@@ -108,21 +105,12 @@ defmodule Milvex.Connection do
   end
 
   @doc """
-  Performs a health check against the Milvus server.
-
-  Returns `:ok` if the server is healthy, or `{:error, error}` otherwise.
-  """
-  @spec health_check(GenServer.server()) :: :ok | {:error, Milvex.Error.t()}
-  def health_check(conn) do
-    GenStateMachine.call(conn, :health_check)
-  end
-
-  @doc """
   Checks if the connection is currently established.
   """
-  @spec connected?(GenServer.server()) :: boolean()
-  def connected?(conn) do
-    GenStateMachine.call(conn, :connected?)
+  @spec connected?(GenServer.server(), keyword()) :: boolean()
+  def connected?(conn, opts \\ []) do
+    timeout = Keyword.get(opts, :timeout, 5_000)
+    GenStateMachine.call(conn, :connected?, timeout)
   end
 
   @impl true
@@ -132,7 +120,7 @@ defmodule Milvex.Connection do
         data = %__MODULE__{
           config: config,
           channel: nil,
-          health_timer: nil,
+          conn_monitor_ref: nil,
           retry_count: 0
         }
 
@@ -151,8 +139,9 @@ defmodule Milvex.Connection do
 
   def connecting(:state_timeout, :connect, data) do
     case establish_connection(data.config) do
-      {:ok, channel} ->
-        {:next_state, :connected, %{data | channel: channel, retry_count: 0}}
+      {:ok, channel, monitor_ref} ->
+        {:next_state, :connected,
+         %{data | channel: channel, conn_monitor_ref: monitor_ref, retry_count: 0}}
 
       {:error, reason} ->
         delay = calculate_backoff_delay(data)
@@ -168,8 +157,9 @@ defmodule Milvex.Connection do
 
   def connecting(:state_timeout, :retry, data) do
     case establish_connection(data.config) do
-      {:ok, channel} ->
-        {:next_state, :connected, %{data | channel: channel, retry_count: 0}}
+      {:ok, channel, monitor_ref} ->
+        {:next_state, :connected,
+         %{data | channel: channel, conn_monitor_ref: monitor_ref, retry_count: 0}}
 
       {:error, reason} ->
         delay = calculate_backoff_delay(data)
@@ -184,10 +174,6 @@ defmodule Milvex.Connection do
     {:keep_state_and_data, [{:reply, from, not_connected_error(data)}]}
   end
 
-  def connecting({:call, from}, :health_check, data) do
-    {:keep_state_and_data, [{:reply, from, not_connected_error(data)}]}
-  end
-
   def connecting({:call, from}, :connected?, _data) do
     {:keep_state_and_data, [{:reply, from, false}]}
   end
@@ -198,35 +184,33 @@ defmodule Milvex.Connection do
 
   # --- :connected state ---
 
-  def connected(:enter, _old_state, data) do
-    timer = schedule_health_check(data.config)
-    {:keep_state, %{data | health_timer: timer}}
+  def connected(:enter, _old_state, _data) do
+    :keep_state_and_data
   end
 
   def connected({:call, from}, :get_channel, data) do
     {:keep_state_and_data, [{:reply, from, {:ok, data.channel}}]}
   end
 
-  def connected({:call, from}, :health_check, data) do
-    result = perform_health_check(data.channel)
-    {:keep_state_and_data, [{:reply, from, result}]}
-  end
-
   def connected({:call, from}, :connected?, _data) do
     {:keep_state_and_data, [{:reply, from, true}]}
   end
 
-  def connected(:info, :health_check, data) do
-    case perform_health_check(data.channel) do
-      :ok ->
-        timer = schedule_health_check(data.config)
-        {:keep_state, %{data | health_timer: timer}}
+  def connected(:info, {:DOWN, ref, :process, _pid, reason}, %{conn_monitor_ref: ref} = data) do
+    Logger.warning("Connection lost: #{inspect(reason)}, reconnecting...")
+    {:next_state, :reconnecting, %{data | channel: nil, conn_monitor_ref: nil, retry_count: 0}}
+  end
 
-      {:error, _reason} ->
-        Logger.warning("Health check failed, reconnecting...")
-        close_channel(data.channel)
-        {:next_state, :reconnecting, %{data | channel: nil, health_timer: nil, retry_count: 0}}
-    end
+  def connected(:info, {:elixir_grpc, :connection_down, _pid}, data) do
+    Logger.warning("Connection down (grpc signal), reconnecting...")
+    demonitor_connection(data.conn_monitor_ref)
+    {:next_state, :reconnecting, %{data | channel: nil, conn_monitor_ref: nil, retry_count: 0}}
+  end
+
+  def connected(:info, {:gun_down, _pid, _protocol, reason, _killed_streams}, data) do
+    Logger.warning("Connection down (gun): #{inspect(reason)}, reconnecting...")
+    demonitor_connection(data.conn_monitor_ref)
+    {:next_state, :reconnecting, %{data | channel: nil, conn_monitor_ref: nil, retry_count: 0}}
   end
 
   def connected(:info, _msg, _data) do
@@ -247,10 +231,6 @@ defmodule Milvex.Connection do
     {:keep_state_and_data, [{:reply, from, not_connected_error(data)}]}
   end
 
-  def reconnecting({:call, from}, :health_check, data) do
-    {:keep_state_and_data, [{:reply, from, not_connected_error(data)}]}
-  end
-
   def reconnecting({:call, from}, :connected?, _data) do
     {:keep_state_and_data, [{:reply, from, false}]}
   end
@@ -267,9 +247,7 @@ defmodule Milvex.Connection do
       close_channel(data.channel)
     end
 
-    if data.health_timer do
-      Process.cancel_timer(data.health_timer)
-    end
+    demonitor_connection(data.conn_monitor_ref)
 
     :ok
   end
@@ -278,9 +256,11 @@ defmodule Milvex.Connection do
 
   defp reconnect(data) do
     case establish_connection(data.config) do
-      {:ok, channel} ->
+      {:ok, channel, monitor_ref} ->
         Logger.info("Reconnected...")
-        {:next_state, :connected, %{data | channel: channel, retry_count: 0}}
+
+        {:next_state, :connected,
+         %{data | channel: channel, conn_monitor_ref: monitor_ref, retry_count: 0}}
 
       {:error, reason} ->
         delay = calculate_backoff_delay(data)
@@ -319,7 +299,8 @@ defmodule Milvex.Connection do
 
     case GRPC.Stub.connect(address, opts) do
       {:ok, channel} ->
-        {:ok, channel}
+        monitor_ref = monitor_connection(channel)
+        {:ok, channel, monitor_ref}
 
       {:error, reason} ->
         {:error,
@@ -330,6 +311,18 @@ defmodule Milvex.Connection do
            retriable: true
          )}
     end
+  end
+
+  defp monitor_connection(%{adapter_payload: %{conn_pid: conn_pid}}) when is_pid(conn_pid) do
+    Process.monitor(conn_pid)
+  end
+
+  defp monitor_connection(_channel), do: nil
+
+  defp demonitor_connection(nil), do: :ok
+
+  defp demonitor_connection(ref) do
+    Process.demonitor(ref, [:flush])
   end
 
   defp build_connection_opts(config) do
@@ -382,39 +375,6 @@ defmodule Milvex.Connection do
 
   defp maybe_add_adapter_opts(opts, _config), do: opts
 
-  defp perform_health_check(channel) do
-    request = %CheckHealthRequest{}
-
-    case MilvusService.Stub.check_health(channel, request, timeout: 5_000) do
-      {:ok, response} ->
-        if response.isHealthy do
-          :ok
-        else
-          {:error,
-           Errors.Grpc.exception(
-             operation: "CheckHealth",
-             code: :unhealthy,
-             message: "Server reported unhealthy status"
-           )}
-        end
-
-      {:error, %GRPC.RPCError{} = error} ->
-        {:error,
-         Errors.Grpc.exception(
-           operation: "CheckHealth",
-           code: error.status,
-           message: error.message || "Health check failed"
-         )}
-
-      {:error, reason} ->
-        {:error,
-         Errors.Connection.exception(
-           reason: reason,
-           retriable: true
-         )}
-    end
-  end
-
   defp close_channel(%{adapter_payload: %{conn_pid: conn_pid}} = channel)
        when is_pid(conn_pid) do
     if Process.alive?(conn_pid) do
@@ -428,10 +388,6 @@ defmodule Milvex.Connection do
   end
 
   defp close_channel(channel), do: {:ok, channel}
-
-  defp schedule_health_check(config) do
-    Process.send_after(self(), :health_check, config.health_check_interval)
-  end
 end
 
 defimpl Inspect, for: Milvex.Connection do

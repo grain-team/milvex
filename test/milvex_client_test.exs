@@ -49,7 +49,7 @@ defmodule MilvexClientTest do
 
   describe "has_collection/3" do
     test "returns true when collection exists" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :has_collection, _request ->
         {:ok, %BoolResponse{status: %Status{code: 0}, value: true}}
@@ -59,7 +59,7 @@ defmodule MilvexClientTest do
     end
 
     test "returns false when collection does not exist" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :has_collection, _request ->
         {:ok, %BoolResponse{status: %Status{code: 0}, value: false}}
@@ -69,7 +69,7 @@ defmodule MilvexClientTest do
     end
 
     test "returns error when connection fails" do
-      stub(Connection, :get_channel, fn _conn ->
+      stub(Connection, :get_channel, fn _conn, _opts ->
         {:error, Milvex.Errors.Connection.exception(reason: :not_connected)}
       end)
 
@@ -80,7 +80,7 @@ defmodule MilvexClientTest do
 
   describe "list_collections/2" do
     test "returns list of collection names" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :show_collections, _request ->
         {:ok,
@@ -94,7 +94,7 @@ defmodule MilvexClientTest do
     end
 
     test "returns empty list when no collections" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :show_collections, _request ->
         {:ok,
@@ -124,7 +124,7 @@ defmodule MilvexClientTest do
     end
 
     test "creates collection successfully", %{schema: schema} do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :create_collection, request ->
         assert request.collection_name == "test"
@@ -136,7 +136,7 @@ defmodule MilvexClientTest do
     end
 
     test "creates collection with custom shards", %{schema: schema} do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :create_collection, request ->
         assert request.shards_num == 4
@@ -147,7 +147,7 @@ defmodule MilvexClientTest do
     end
 
     test "returns error when collection already exists", %{schema: schema} do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :create_collection, _request ->
         {:ok, %Status{code: 65_535, reason: "collection already exists"}}
@@ -159,7 +159,7 @@ defmodule MilvexClientTest do
 
   describe "drop_collection/3" do
     test "drops collection successfully" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :drop_collection, request ->
         assert request.collection_name == "test"
@@ -170,7 +170,7 @@ defmodule MilvexClientTest do
     end
 
     test "returns error when collection does not exist" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :drop_collection, _request ->
         {:ok, %Status{code: 4, reason: "collection not found"}}
@@ -182,7 +182,7 @@ defmodule MilvexClientTest do
 
   describe "describe_collection/3" do
     test "returns collection metadata" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :describe_collection, _request ->
         {:ok,
@@ -223,7 +223,7 @@ defmodule MilvexClientTest do
 
   describe "load_collection/3" do
     test "loads collection successfully" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :load_collection, request ->
         assert request.collection_name == "test"
@@ -235,7 +235,7 @@ defmodule MilvexClientTest do
     end
 
     test "loads collection with custom replicas" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :load_collection, request ->
         assert request.replica_number == 3
@@ -248,7 +248,7 @@ defmodule MilvexClientTest do
 
   describe "release_collection/3" do
     test "releases collection successfully" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :release_collection, request ->
         assert request.collection_name == "test"
@@ -284,7 +284,7 @@ defmodule MilvexClientTest do
           schema
         )
 
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :insert, request ->
         assert request.collection_name == "test"
@@ -304,7 +304,7 @@ defmodule MilvexClientTest do
     end
 
     test "inserts rows with auto-schema fetch" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, method, _request ->
         case method do
@@ -369,7 +369,7 @@ defmodule MilvexClientTest do
           )
         )
 
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :insert, _request ->
         {:ok,
@@ -387,7 +387,7 @@ defmodule MilvexClientTest do
 
   describe "delete/4" do
     test "deletes by expression" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :delete, request ->
         assert request.collection_name == "test"
@@ -405,7 +405,7 @@ defmodule MilvexClientTest do
     end
 
     test "supports partition_name option" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :delete, request ->
         assert request.partition_name == "partition_a"
@@ -439,7 +439,7 @@ defmodule MilvexClientTest do
           schema
         )
 
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :upsert, _request ->
         {:ok,
@@ -457,7 +457,7 @@ defmodule MilvexClientTest do
 
   describe "query/4" do
     test "queries with filter expression" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :query, request ->
         assert request.collection_name == "test"
@@ -480,7 +480,7 @@ defmodule MilvexClientTest do
     end
 
     test "supports limit and offset" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :query, request ->
         limit_param = Enum.find(request.query_params, &(&1.key == "limit"))
@@ -511,7 +511,7 @@ defmodule MilvexClientTest do
     end
 
     test "searches with vector field" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, method, _request ->
         case method do
@@ -561,7 +561,7 @@ defmodule MilvexClientTest do
     end
 
     test "returns error when vector field not found" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :describe_collection, _request ->
         {:ok,
@@ -589,7 +589,7 @@ defmodule MilvexClientTest do
     end
 
     test "returns error when field is not a vector type" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :describe_collection, _request ->
         {:ok,
@@ -625,7 +625,7 @@ defmodule MilvexClientTest do
     test "creates index with Index struct" do
       index = Index.hnsw("embedding", :cosine, m: 16, ef_construction: 256)
 
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :create_index, request ->
         assert request.collection_name == "test"
@@ -649,7 +649,7 @@ defmodule MilvexClientTest do
     test "creates index with named Index" do
       index = Index.hnsw("embedding", :l2, name: "my_hnsw_index")
 
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :create_index, request ->
         assert request.index_name == "my_hnsw_index"
@@ -669,7 +669,7 @@ defmodule MilvexClientTest do
 
   describe "create_index/4 with field name string" do
     test "creates index with field name and options" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :create_index, request ->
         assert request.field_name == "embedding"
@@ -691,7 +691,7 @@ defmodule MilvexClientTest do
 
   describe "drop_index/4" do
     test "drops index successfully" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :drop_index, request ->
         assert request.collection_name == "test"
@@ -703,7 +703,7 @@ defmodule MilvexClientTest do
     end
 
     test "drops named index" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :drop_index, request ->
         assert request.index_name == "my_index"
@@ -716,7 +716,7 @@ defmodule MilvexClientTest do
 
   describe "describe_index/3" do
     test "returns index descriptions" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :describe_index, request ->
         assert request.collection_name == "test"
@@ -750,7 +750,7 @@ defmodule MilvexClientTest do
 
   describe "create_partition/4" do
     test "creates partition successfully" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :create_partition, request ->
         assert request.collection_name == "test"
@@ -764,7 +764,7 @@ defmodule MilvexClientTest do
 
   describe "drop_partition/4" do
     test "drops partition successfully" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :drop_partition, request ->
         assert request.collection_name == "test"
@@ -776,7 +776,7 @@ defmodule MilvexClientTest do
     end
 
     test "returns error when partition not found" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :drop_partition, _request ->
         {:ok, %Status{code: 4, reason: "partition not found"}}
@@ -788,7 +788,7 @@ defmodule MilvexClientTest do
 
   describe "has_partition/4" do
     test "returns true when partition exists" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :has_partition, request ->
         assert request.partition_name == "partition_2024"
@@ -799,7 +799,7 @@ defmodule MilvexClientTest do
     end
 
     test "returns false when partition does not exist" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :has_partition, _request ->
         {:ok, %BoolResponse{status: %Status{code: 0}, value: false}}
@@ -811,7 +811,7 @@ defmodule MilvexClientTest do
 
   describe "list_partitions/3" do
     test "returns list of partition names" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :show_partitions, request ->
         assert request.collection_name == "test"
@@ -831,7 +831,7 @@ defmodule MilvexClientTest do
 
   describe "load_partitions/4" do
     test "loads partitions successfully" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :load_partitions, request ->
         assert request.collection_name == "test"
@@ -844,7 +844,7 @@ defmodule MilvexClientTest do
     end
 
     test "loads multiple partitions with custom replicas" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :load_partitions, request ->
         assert length(request.partition_names) == 2
@@ -861,7 +861,7 @@ defmodule MilvexClientTest do
 
   describe "release_partitions/4" do
     test "releases partitions successfully" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :release_partitions, request ->
         assert request.collection_name == "test"
@@ -873,7 +873,7 @@ defmodule MilvexClientTest do
     end
 
     test "releases multiple partitions" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :release_partitions, request ->
         assert length(request.partition_names) == 2
@@ -886,7 +886,7 @@ defmodule MilvexClientTest do
 
   describe "collection module support" do
     test "has_collection accepts module" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :has_collection, request ->
         assert request.collection_name == "test_movies"
@@ -897,7 +897,7 @@ defmodule MilvexClientTest do
     end
 
     test "drop_collection accepts module" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :drop_collection, request ->
         assert request.collection_name == "test_movies"
@@ -908,7 +908,7 @@ defmodule MilvexClientTest do
     end
 
     test "load_collection accepts module" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :load_collection, request ->
         assert request.collection_name == "test_movies"
@@ -919,7 +919,7 @@ defmodule MilvexClientTest do
     end
 
     test "release_collection accepts module" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :release_collection, request ->
         assert request.collection_name == "test_movies"
@@ -932,7 +932,7 @@ defmodule MilvexClientTest do
     test "create_index accepts module" do
       index = Index.hnsw("embedding", :cosine)
 
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :create_index, request ->
         assert request.collection_name == "test_movies"
@@ -943,7 +943,7 @@ defmodule MilvexClientTest do
     end
 
     test "query accepts module" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :query, request ->
         assert request.collection_name == "test_movies"
@@ -961,7 +961,7 @@ defmodule MilvexClientTest do
     end
 
     test "delete accepts module" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :delete, request ->
         assert request.collection_name == "test_movies"
@@ -972,7 +972,7 @@ defmodule MilvexClientTest do
     end
 
     test "create_partition accepts module" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :create_partition, request ->
         assert request.collection_name == "test_movies"
@@ -985,7 +985,7 @@ defmodule MilvexClientTest do
     end
 
     test "list_partitions accepts module" do
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :show_partitions, request ->
         assert request.collection_name == "test_movies"
@@ -1008,7 +1008,7 @@ defmodule MilvexClientTest do
         %MilvexClientTest.TestCollection{title: "Movie 2", embedding: [0.5, 0.6, 0.7, 0.8]}
       ]
 
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :insert, request ->
         assert request.collection_name == "test_movies"
@@ -1032,7 +1032,7 @@ defmodule MilvexClientTest do
         %MilvexClientTest.TestCollection{title: "Test", embedding: [0.1, 0.2, 0.3, 0.4]}
       ]
 
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, method, _request ->
         assert method == :insert, "Expected only :insert call, got #{method}"
@@ -1053,7 +1053,7 @@ defmodule MilvexClientTest do
         %MilvexClientTest.TestCollection{id: 1, title: "Updated", embedding: [0.1, 0.2, 0.3, 0.4]}
       ]
 
-      stub(Connection, :get_channel, fn _conn -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
       stub(RPC, :call, fn _channel, _stub, :upsert, request ->
         assert request.collection_name == "test_movies"

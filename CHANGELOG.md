@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.2](https://github.com/grain-team/milvex/compare/v0.5.1...v0.5.2) (2026-02-02)
+
+
+### Bug Fixes
+
+* Fixes healthcheck ([0f03f42](https://github.com/grain-team/milvex/commit/0f03f42b7adf71973f368537fa8b6ee72eba6acd))
+
 ## [0.5.1](https://github.com/grain-team/milvex/compare/v0.5.0...v0.5.1) (2026-01-28)
 
 

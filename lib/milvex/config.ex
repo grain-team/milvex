@@ -27,7 +27,7 @@ defmodule Milvex.Config do
                        )
                        |> Zoi.optional(),
                      timeout:
-                       Zoi.integer(description: "Connection timeout in milliseconds")
+                       Zoi.integer(description: "Timeout for gRPC calls in milliseconds")
                        |> Zoi.min(1000)
                        |> Zoi.optional()
                        |> Zoi.default(30_000),
@@ -67,11 +67,6 @@ defmodule Milvex.Config do
                        |> Zoi.max(1.0)
                        |> Zoi.optional()
                        |> Zoi.default(0.1),
-                     health_check_interval:
-                       Zoi.integer(description: "Health check interval in milliseconds")
-                       |> Zoi.min(1_000)
-                       |> Zoi.optional()
-                       |> Zoi.default(30_000),
                      adapter:
                        Zoi.any(description: "GRPC client adapter module")
                        |> Zoi.optional()

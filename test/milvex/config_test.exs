@@ -171,7 +171,6 @@ defmodule Milvex.ConfigTest do
       assert config.reconnect_max_delay == 60_000
       assert config.reconnect_multiplier == 2.0
       assert config.reconnect_jitter == 0.1
-      assert config.health_check_interval == 30_000
     end
 
     test "parses custom backoff options" do
@@ -180,15 +179,13 @@ defmodule Milvex.ConfigTest do
           reconnect_base_delay: 500,
           reconnect_max_delay: 30_000,
           reconnect_multiplier: 1.5,
-          reconnect_jitter: 0.2,
-          health_check_interval: 15_000
+          reconnect_jitter: 0.2
         )
 
       assert config.reconnect_base_delay == 500
       assert config.reconnect_max_delay == 30_000
       assert config.reconnect_multiplier == 1.5
       assert config.reconnect_jitter == 0.2
-      assert config.health_check_interval == 15_000
     end
 
     test "validates reconnect_base_delay minimum" do
@@ -220,11 +217,6 @@ defmodule Milvex.ConfigTest do
 
       {:error, error} = Config.parse(reconnect_jitter: 1.5)
       assert error.message =~ "reconnect_jitter"
-    end
-
-    test "validates health_check_interval minimum" do
-      {:error, error} = Config.parse(health_check_interval: 500)
-      assert error.message =~ "health_check_interval"
     end
   end
 

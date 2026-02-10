@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.3](https://github.com/grain-team/milvex/compare/v0.5.2...v0.5.3) (2026-02-10)
+
+
+### Bug Fixes
+
+* Fix socket leak on Gun Adapter ([6c56e73](https://github.com/grain-team/milvex/commit/6c56e739d53aa7197f3fae5cedbcd9ecb03bbf1a))
+
 ## [0.5.2](https://github.com/grain-team/milvex/compare/v0.5.1...v0.5.2) (2026-02-02)
 
 

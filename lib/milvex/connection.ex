@@ -196,20 +196,19 @@ defmodule Milvex.Connection do
     {:keep_state_and_data, [{:reply, from, true}]}
   end
 
-  def connected(:info, {:DOWN, ref, :process, _pid, reason}, %{conn_monitor_ref: ref} = data) do
-    Logger.warning("Connection lost: #{inspect(reason)}, reconnecting...")
+  def connected(:info, {:DOWN, ref, :process, _pid, _reason}, %{conn_monitor_ref: ref} = data) do
     {:next_state, :reconnecting, %{data | channel: nil, conn_monitor_ref: nil, retry_count: 0}}
   end
 
   def connected(:info, {:elixir_grpc, :connection_down, _pid}, data) do
-    Logger.warning("Connection down (grpc signal), reconnecting...")
     demonitor_connection(data.conn_monitor_ref)
+    close_channel(data.channel)
     {:next_state, :reconnecting, %{data | channel: nil, conn_monitor_ref: nil, retry_count: 0}}
   end
 
-  def connected(:info, {:gun_down, _pid, _protocol, reason, _killed_streams}, data) do
-    Logger.warning("Connection down (gun): #{inspect(reason)}, reconnecting...")
+  def connected(:info, {:gun_down, _pid, _protocol, _jreason, _killed_streams}, data) do
     demonitor_connection(data.conn_monitor_ref)
+    close_channel(data.channel)
     {:next_state, :reconnecting, %{data | channel: nil, conn_monitor_ref: nil, retry_count: 0}}
   end
 
@@ -257,8 +256,6 @@ defmodule Milvex.Connection do
   defp reconnect(data) do
     case establish_connection(data.config) do
       {:ok, channel, monitor_ref} ->
-        Logger.info("Reconnected...")
-
         {:next_state, :connected,
          %{data | channel: channel, conn_monitor_ref: monitor_ref, retry_count: 0}}
 
@@ -368,6 +365,12 @@ defmodule Milvex.Connection do
   end
 
   defp maybe_add_adapter(opts, _config), do: opts
+
+  defp maybe_add_adapter_opts(opts, %{adapter: GRPC.Client.Adapters.Gun} = config) do
+    adapter_opts = Map.get(config, :adapter_opts, [])
+    adapter_opts = Keyword.put_new(adapter_opts, :retry, 0)
+    Keyword.put(opts, :adapter_opts, adapter_opts)
+  end
 
   defp maybe_add_adapter_opts(opts, %{adapter_opts: adapter_opts}) when adapter_opts != [] do
     Keyword.put(opts, :adapter_opts, adapter_opts)

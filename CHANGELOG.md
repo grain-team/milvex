@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/grain-team/milvex/compare/v0.5.3...v0.6.0) (2026-03-04)
+
+
+### Features
+
+* Adds Telemetry ([ed4840d](https://github.com/grain-team/milvex/commit/ed4840dfe4397dae8f6cf568af02617fb0220a8b))
+
 ## [0.5.3](https://github.com/grain-team/milvex/compare/v0.5.2...v0.5.3) (2026-02-10)
 
 

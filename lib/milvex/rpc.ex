@@ -27,6 +27,7 @@ defmodule Milvex.RPC do
   alias Milvex.Errors.Connection
   alias Milvex.Errors.Grpc
   alias Milvex.Milvus.Proto.Common.Status
+  alias Milvex.Telemetry
 
   @type rpc_result :: {:ok, struct()} | {:error, Error.t()}
 
@@ -53,16 +54,23 @@ defmodule Milvex.RPC do
   """
   @spec call(GRPC.Channel.t(), module(), atom(), struct(), keyword()) :: rpc_result()
   def call(channel, stub_module, method, request, opts \\ []) do
-    case apply(stub_module, method, [channel, request, opts]) do
-      {:ok, response} ->
-        {:ok, response}
+    metadata = Telemetry.rpc_metadata(method, stub_module, request)
 
-      {:error, %GRPC.RPCError{} = error} ->
-        {:error, grpc_error_to_error(error, to_string(method))}
+    Telemetry.rpc_span(metadata, fn ->
+      case apply(stub_module, method, [channel, request, opts]) do
+        {:ok, response} ->
+          status_code = extract_status_code(response)
+          {{:ok, response}, Map.put(metadata, :status_code, status_code)}
 
-      {:error, reason} ->
-        {:error, connection_error(reason)}
-    end
+        {:error, %GRPC.RPCError{} = error} ->
+          result = {:error, grpc_error_to_error(error, to_string(method))}
+          {result, Map.put(metadata, :status_code, error.status)}
+
+        {:error, reason} ->
+          result = {:error, connection_error(reason)}
+          {result, Map.put(metadata, :status_code, nil)}
+      end
+    end)
   end
 
   @doc """
@@ -235,4 +243,7 @@ defmodule Milvex.RPC do
   defp build_message(_reason, _detail) do
     "Operation failed"
   end
+
+  defp extract_status_code(%{status: %Status{code: code}}), do: code
+  defp extract_status_code(_response), do: nil
 end

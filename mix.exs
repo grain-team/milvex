@@ -66,6 +66,9 @@ defmodule Milvex.MixProject do
             Milvex.Errors.Invalid,
             Milvex.Errors.Unknown
           ],
+          Telemetry: [
+            Milvex.Telemetry
+          ],
           Configuration: [
             Milvex.Config,
             Milvex.Backoff,
@@ -101,26 +104,29 @@ defmodule Milvex.MixProject do
   defp deps do
     [
       {:assert_eventually, "~> 1.0", only: :test},
+      {:bandit, "~> 1.8", only: :dev, runtime: false},
       {:benchee, "~> 1.0", only: :dev},
       {:castore, "~> 1.0"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:doctor, "~> 0.22.0", only: :dev},
+      {:doctor, "~> 0.22", only: :dev},
       {:ex_check, "~> 0.16", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.18", only: [:dev, :test]},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:gen_state_machine, "~> 3.0"},
-      {:grpc, "~> 0.11.5"},
+      {:grpc, "~> 0.11"},
       {:jason, "~> 1.4"},
       {:mimic, "~> 2.2", only: :test},
       {:mint, "~> 1.7", optional: true},
       {:mix_audit, ">= 0.0.0", only: [:dev, :test], runtime: false},
       {:nx, "~> 0.10", optional: true},
-      {:protobuf, "~> 0.15.0"},
-      {:recode, "~> 0.8.0", only: [:dev], runtime: false},
+      {:protobuf, "~> 0.15"},
+      {:recode, "~> 0.8", only: [:dev], runtime: false},
       {:spark, "~> 2.3"},
-      {:splode, "~> 0.2.9"},
+      {:splode, "~> 0.2"},
+      {:telemetry, "~> 1.0"},
       {:testcontainers, "~> 1.13", only: [:test, :dev]},
+      {:tidewave, "~> 0.5", only: :dev, runtime: false},
       {:zoi, "~> 0.11"}
     ]
   end

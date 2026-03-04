@@ -110,4 +110,6 @@ tags
 
 **/CLAUDE.md
 
+.env
+
 # End of https://www.toptal.com/developers/gitignore/api/elixir,erlang,macos,visualstudiocode,vim

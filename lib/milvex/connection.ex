@@ -50,6 +50,7 @@ defmodule Milvex.Connection do
   alias Milvex.Backoff
   alias Milvex.Config
   alias Milvex.Errors
+  alias Milvex.Telemetry
 
   defstruct [:config, :channel, :conn_monitor_ref, retry_count: 0]
 
@@ -138,8 +139,12 @@ defmodule Milvex.Connection do
   end
 
   def connecting(:state_timeout, :connect, data) do
+    Telemetry.connection_reconnect(data.config.host, data.config.port, data.retry_count, 0)
+
     case establish_connection(data.config) do
       {:ok, channel, monitor_ref} ->
+        Telemetry.connection_connect(data.config.host, data.config.port)
+
         {:next_state, :connected,
          %{data | channel: channel, conn_monitor_ref: monitor_ref, retry_count: 0}}
 
@@ -156,13 +161,17 @@ defmodule Milvex.Connection do
   end
 
   def connecting(:state_timeout, :retry, data) do
+    delay = calculate_backoff_delay(data)
+    Telemetry.connection_reconnect(data.config.host, data.config.port, data.retry_count, delay)
+
     case establish_connection(data.config) do
       {:ok, channel, monitor_ref} ->
+        Telemetry.connection_connect(data.config.host, data.config.port)
+
         {:next_state, :connected,
          %{data | channel: channel, conn_monitor_ref: monitor_ref, retry_count: 0}}
 
       {:error, reason} ->
-        delay = calculate_backoff_delay(data)
         Logger.warning("Connection retry failed: #{inspect(reason)}, retrying in #{delay}ms...")
 
         {:keep_state, %{data | retry_count: data.retry_count + 1},
@@ -196,17 +205,20 @@ defmodule Milvex.Connection do
     {:keep_state_and_data, [{:reply, from, true}]}
   end
 
-  def connected(:info, {:DOWN, ref, :process, _pid, _reason}, %{conn_monitor_ref: ref} = data) do
+  def connected(:info, {:DOWN, ref, :process, _pid, reason}, %{conn_monitor_ref: ref} = data) do
+    Telemetry.connection_disconnect(data.config.host, data.config.port, reason)
     {:next_state, :reconnecting, %{data | channel: nil, conn_monitor_ref: nil, retry_count: 0}}
   end
 
   def connected(:info, {:elixir_grpc, :connection_down, _pid}, data) do
+    Telemetry.connection_disconnect(data.config.host, data.config.port, :connection_down)
     demonitor_connection(data.conn_monitor_ref)
     close_channel(data.channel)
     {:next_state, :reconnecting, %{data | channel: nil, conn_monitor_ref: nil, retry_count: 0}}
   end
 
-  def connected(:info, {:gun_down, _pid, _protocol, _jreason, _killed_streams}, data) do
+  def connected(:info, {:gun_down, _pid, _protocol, reason, _killed_streams}, data) do
+    Telemetry.connection_disconnect(data.config.host, data.config.port, reason)
     demonitor_connection(data.conn_monitor_ref)
     close_channel(data.channel)
     {:next_state, :reconnecting, %{data | channel: nil, conn_monitor_ref: nil, retry_count: 0}}
@@ -254,13 +266,17 @@ defmodule Milvex.Connection do
   # --- Private helpers ---
 
   defp reconnect(data) do
+    delay = calculate_backoff_delay(data)
+    Telemetry.connection_reconnect(data.config.host, data.config.port, data.retry_count, delay)
+
     case establish_connection(data.config) do
       {:ok, channel, monitor_ref} ->
+        Telemetry.connection_connect(data.config.host, data.config.port)
+
         {:next_state, :connected,
          %{data | channel: channel, conn_monitor_ref: monitor_ref, retry_count: 0}}
 
       {:error, reason} ->
-        delay = calculate_backoff_delay(data)
         Logger.warning("Reconnection failed: #{inspect(reason)}, retrying in #{delay}ms...")
 
         {:keep_state, %{data | retry_count: data.retry_count + 1},

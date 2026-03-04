@@ -36,6 +36,7 @@ defmodule Milvex.Data do
   alias Milvex.Data.FieldData
   alias Milvex.Errors.Invalid
   alias Milvex.Schema
+  alias Milvex.Telemetry
 
   @type t :: %__MODULE__{
           fields: %{String.t() => list()},
@@ -128,8 +129,16 @@ defmodule Milvex.Data do
   Converts the Data to a list of FieldData proto structs.
   """
   @spec to_proto(t()) :: [Milvex.Milvus.Proto.Schema.FieldData.t()]
-  def to_proto(%__MODULE__{fields: fields, schema: schema}) do
-    # Exclude fields marked with is_dynamic from regular field data
+  def to_proto(%__MODULE__{fields: fields, schema: schema, num_rows: num_rows}) do
+    metadata = %{row_count: num_rows, field_count: length(schema.fields)}
+
+    Telemetry.data_encode_span(metadata, fn ->
+      result = encode_fields(fields, schema)
+      {result, metadata}
+    end)
+  end
+
+  defp encode_fields(fields, schema) do
     schema_field_data =
       schema.fields
       |> Enum.filter(fn field ->
@@ -140,7 +149,6 @@ defmodule Milvex.Data do
         FieldData.to_proto(field.name, values, field)
       end)
 
-    # Add $meta when we have dynamic values (from enable_dynamic_field or is_dynamic fields)
     has_dynamic_support = schema.enable_dynamic_field or has_dynamic_schema_fields?(schema)
 
     case {has_dynamic_support, Map.get(fields, "$meta")} do

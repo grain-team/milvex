@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/grain-team/milvex/compare/v0.6.0...v0.7.0) (2026-03-12)
+
+
+### Features
+
+* Adds support to decay ranker ([4a0653e](https://github.com/grain-team/milvex/commit/4a0653e4f4746b96f87cc248e291b46563eaf7d6))
+
 ## [0.6.0](https://github.com/grain-team/milvex/compare/v0.5.3...v0.6.0) (2026-03-04)
 
 

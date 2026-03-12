@@ -45,5 +45,15 @@ defmodule Milvex.HybridSearchTest do
 
       assert {:error, _} = Milvex.hybrid_search(:conn, "collection", [search1, search2], ranker)
     end
+
+    test "DecayRanker doesn't require weight matching" do
+      {:ok, search1} = AnnSearch.new("field1", [[0.1, 0.2]], limit: 10)
+      {:ok, search2} = AnnSearch.new("field2", [[0.3, 0.4]], limit: 10)
+      {:ok, ranker} = Ranker.decay(:gauss, field: "timestamp", origin: 1_000_000, scale: 3600)
+
+      stub(Connection, :get_channel, fn _, _ -> {:error, :not_connected} end)
+
+      assert {:error, _} = Milvex.hybrid_search(:conn, "collection", [search1, search2], ranker)
+    end
   end
 end

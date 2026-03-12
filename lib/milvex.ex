@@ -9,6 +9,7 @@ defmodule Milvex do
   alias Milvex.Errors.Invalid
   alias Milvex.Index
   alias Milvex.QueryResult
+  alias Milvex.Ranker.DecayRanker
   alias Milvex.Ranker.RRFRanker
   alias Milvex.Ranker.WeightedRanker
   alias Milvex.RPC
@@ -21,6 +22,8 @@ defmodule Milvex do
   alias Milvex.Milvus.Proto.Common.PlaceholderValue
 
   alias Milvex.Milvus.Proto.Schema.CollectionSchema
+  alias Milvex.Milvus.Proto.Schema.FunctionSchema
+  alias Milvex.Milvus.Proto.Schema.FunctionScore
   alias Milvex.Milvus.Proto.Schema.IDs
   alias Milvex.Milvus.Proto.Schema.LongArray
   alias Milvex.Milvus.Proto.Schema.StringArray
@@ -826,7 +829,7 @@ defmodule Milvex do
     - `conn` - Connection process
     - `collection` - Collection name or module
     - `searches` - List of `AnnSearch.t()` structs
-    - `ranker` - `WeightedRanker.t()` or `RRFRanker.t()`
+    - `ranker` - `WeightedRanker.t()`, `RRFRanker.t()`, or `DecayRanker.t()`
     - `opts` - Options (see below)
 
   ## Options
@@ -851,7 +854,7 @@ defmodule Milvex do
           GenServer.server(),
           collection_ref(),
           [AnnSearch.t()],
-          WeightedRanker.t() | RRFRanker.t(),
+          WeightedRanker.t() | RRFRanker.t() | DecayRanker.t(),
           keyword()
         ) :: {:ok, SearchResult.t()} | {:error, Error.t()}
   def hybrid_search(conn, collection, searches, ranker, opts \\ [])
@@ -872,7 +875,15 @@ defmodule Milvex do
     do_hybrid_search(conn, collection, searches, ranker, opts)
   end
 
-  defp do_hybrid_search(conn, collection, searches, ranker, opts) do
+  def hybrid_search(conn, collection, searches, %DecayRanker{} = ranker, opts) do
+    base_ranker = Keyword.get(opts, :base_ranker, %RRFRanker{})
+
+    do_hybrid_search(conn, collection, searches, base_ranker, opts,
+      function_score: build_function_score(ranker)
+    )
+  end
+
+  defp do_hybrid_search(conn, collection, searches, ranker, opts, extra \\ []) do
     collection_name = resolve_collection_name(collection)
 
     with {:ok, channel} <- Connection.get_channel(conn, opts),
@@ -885,7 +896,8 @@ defmodule Milvex do
         rank_params: build_rank_params(ranker, opts),
         output_fields: Keyword.get(opts, :output_fields, []),
         partition_names: Keyword.get(opts, :partition_names, []),
-        consistency_level: get_consistency_level(opts)
+        consistency_level: get_consistency_level(opts),
+        function_score: Keyword.get(extra, :function_score)
       }
 
       with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :hybrid_search, request),
@@ -979,6 +991,28 @@ defmodule Milvex do
       %KeyValuePair{key: "strategy", value: "rrf"},
       %KeyValuePair{key: "params", value: params}
     ] ++ build_limit_params(opts)
+  end
+
+  defp build_function_score(%DecayRanker{} = ranker) do
+    params = [
+      %KeyValuePair{key: "reranker", value: "decay"},
+      %KeyValuePair{key: "function", value: Atom.to_string(ranker.function)},
+      %KeyValuePair{key: "origin", value: to_string(ranker.origin)},
+      %KeyValuePair{key: "scale", value: to_string(ranker.scale)},
+      %KeyValuePair{key: "offset", value: to_string(ranker.offset)},
+      %KeyValuePair{key: "decay", value: to_string(ranker.decay)}
+    ]
+
+    %FunctionScore{
+      functions: [
+        %FunctionSchema{
+          name: "decay_ranker",
+          type: :Rerank,
+          input_field_names: [ranker.field],
+          params: params
+        }
+      ]
+    }
   end
 
   defp build_limit_params(opts) do

@@ -7,6 +7,7 @@ defmodule Milvex do
   alias Milvex.Data
   alias Milvex.Error
   alias Milvex.Errors.Invalid
+  alias Milvex.Highlighter, as: MilvexHighlighter
   alias Milvex.Index
   alias Milvex.QueryResult
   alias Milvex.Ranker.DecayRanker
@@ -17,6 +18,7 @@ defmodule Milvex do
   alias Milvex.Schema.Field
   alias Milvex.SearchResult
 
+  alias Milvex.Milvus.Proto.Common.Highlighter, as: ProtoHighlighter
   alias Milvex.Milvus.Proto.Common.KeyValuePair
   alias Milvex.Milvus.Proto.Common.PlaceholderGroup
   alias Milvex.Milvus.Proto.Common.PlaceholderValue
@@ -749,6 +751,7 @@ defmodule Milvex do
     - `:partition_names` - List of partition names to search
     - `:db_name` - Database name (default: "")
     - `:consistency_level` - Consistency level (default: `:Bounded`)
+    - `:highlight` - A `Milvex.Highlighter.t()` to enable search result highlighting
 
   ## Returns
 
@@ -800,7 +803,7 @@ defmodule Milvex do
          {:ok, channel} <- Connection.get_channel(conn, opts),
          {:ok, info} <- describe_collection(conn, collection_name, opts),
          {:ok, field, is_nested} <- find_vector_field(info.schema, vector_field),
-         {:ok, placeholder_bytes} <- build_placeholder_group(vectors, field, is_nested) do
+         {:ok, placeholder_bytes} <- build_ann_placeholder_group(vectors, field, is_nested) do
       request = %SearchRequest{
         db_name: get_db_name(opts),
         collection_name: collection_name,
@@ -811,7 +814,8 @@ defmodule Milvex do
         output_fields: Keyword.get(opts, :output_fields, []),
         search_params: build_search_params(opts, vector_field),
         nq: length(vectors),
-        consistency_level: get_consistency_level(opts)
+        consistency_level: get_consistency_level(opts),
+        highlighter: build_highlighter(Keyword.get(opts, :highlight))
       }
 
       with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :search, request),
@@ -1021,6 +1025,28 @@ defmodule Milvex do
       limit -> [%KeyValuePair{key: "limit", value: to_string(limit)}]
     end
   end
+
+  defp build_highlighter(nil), do: nil
+
+  defp build_highlighter(%MilvexHighlighter{type: type, params: params}) do
+    proto_type =
+      case type do
+        :lexical -> :Lexical
+        :semantic -> :Semantic
+      end
+
+    kvs =
+      Enum.map(params, fn {key, value} ->
+        %KeyValuePair{key: to_string(key), value: encode_highlighter_value(value)}
+      end)
+
+    %ProtoHighlighter{type: proto_type, params: kvs}
+  end
+
+  defp encode_highlighter_value(value) when is_list(value), do: Jason.encode!(value)
+  defp encode_highlighter_value(value) when is_binary(value), do: value
+  defp encode_highlighter_value(value) when is_boolean(value), do: to_string(value)
+  defp encode_highlighter_value(value) when is_number(value), do: to_string(value)
 
   # ============================================================================
   # Partition Operations

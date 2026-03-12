@@ -5,6 +5,8 @@ defmodule Milvex.SearchResultTest do
   alias Milvex.SearchResult
   alias Milvex.SearchResult.Hit
 
+  alias Milvex.Milvus.Proto.Common.HighlightData
+  alias Milvex.Milvus.Proto.Common.HighlightResult
   alias Milvex.Milvus.Proto.Schema.FieldData
   alias Milvex.Milvus.Proto.Schema.FloatArray
   alias Milvex.Milvus.Proto.Schema.IDs
@@ -507,6 +509,124 @@ defmodule Milvex.SearchResultTest do
 
     test "empty?/1 returns false when keyed results have hits", %{keyed_result: result} do
       refute SearchResult.empty?(result)
+    end
+  end
+
+  describe "highlight parsing" do
+    test "parses single field highlights" do
+      proto = %SearchResults{
+        results: %SearchResultData{
+          num_queries: 1,
+          top_k: 2,
+          ids: %IDs{id_field: {:int_id, %LongArray{data: [1, 2]}}},
+          scores: [0.9, 0.8],
+          distances: [],
+          topks: [2],
+          fields_data: [],
+          output_fields: [],
+          highlight_results: [
+            %HighlightResult{
+              field_name: "content",
+              datas: [
+                %HighlightData{fragments: ["the <em>quick</em> brown fox"], scores: [1.0]},
+                %HighlightData{fragments: ["lazy <em>dog</em> jumped"], scores: [0.8]}
+              ]
+            }
+          ]
+        },
+        collection_name: "docs"
+      }
+
+      result = SearchResult.from_proto(proto)
+
+      [[hit1, hit2]] = result.hits
+      assert hit1.highlights == %{"content" => ["the <em>quick</em> brown fox"]}
+      assert hit2.highlights == %{"content" => ["lazy <em>dog</em> jumped"]}
+    end
+
+    test "parses multiple highlighted fields" do
+      proto = %SearchResults{
+        results: %SearchResultData{
+          num_queries: 1,
+          top_k: 1,
+          ids: %IDs{id_field: {:int_id, %LongArray{data: [42]}}},
+          scores: [0.95],
+          distances: [],
+          topks: [1],
+          fields_data: [],
+          output_fields: [],
+          highlight_results: [
+            %HighlightResult{
+              field_name: "title",
+              datas: [
+                %HighlightData{fragments: ["<em>Elixir</em> in Action"], scores: [1.0]}
+              ]
+            },
+            %HighlightResult{
+              field_name: "body",
+              datas: [
+                %HighlightData{
+                  fragments: ["Learn <em>Elixir</em> today", "Build <em>Elixir</em> apps"],
+                  scores: [1.0, 0.9]
+                }
+              ]
+            }
+          ]
+        },
+        collection_name: "articles"
+      }
+
+      result = SearchResult.from_proto(proto)
+
+      [[hit]] = result.hits
+
+      assert hit.highlights == %{
+               "title" => ["<em>Elixir</em> in Action"],
+               "body" => ["Learn <em>Elixir</em> today", "Build <em>Elixir</em> apps"]
+             }
+    end
+
+    test "highlights default to empty map when no highlight_results" do
+      proto = %SearchResults{
+        results: %SearchResultData{
+          num_queries: 1,
+          top_k: 1,
+          ids: %IDs{id_field: {:int_id, %LongArray{data: [1]}}},
+          scores: [0.9],
+          distances: [],
+          topks: [1],
+          fields_data: [],
+          output_fields: []
+        },
+        collection_name: "test"
+      }
+
+      result = SearchResult.from_proto(proto)
+
+      [[hit]] = result.hits
+      assert hit.highlights == %{}
+    end
+
+    test "highlights default to empty map when highlight_results is empty list" do
+      proto = %SearchResults{
+        results: %SearchResultData{
+          num_queries: 1,
+          top_k: 1,
+          ids: %IDs{id_field: {:int_id, %LongArray{data: [1]}}},
+          scores: [0.9],
+          distances: [],
+          topks: [1],
+          fields_data: [],
+          output_fields: [],
+          highlight_results: []
+        },
+        collection_name: "test"
+      }
+
+      result = SearchResult.from_proto(proto)
+
+      [[hit]] = result.hits
+      assert hit.highlights == %{}
     end
   end
 end

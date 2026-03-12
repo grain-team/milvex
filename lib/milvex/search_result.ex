@@ -27,6 +27,7 @@ defmodule Milvex.SearchResult do
   """
 
   alias Milvex.Data.FieldData
+  alias Milvex.Milvus.Proto.Common.HighlightData
   alias Milvex.Milvus.Proto.Milvus.SearchResults
   alias Milvex.Milvus.Proto.Schema.IDs
   alias Milvex.Milvus.Proto.Schema.LongArray
@@ -41,10 +42,11 @@ defmodule Milvex.SearchResult do
             id: integer() | String.t(),
             score: float(),
             distance: float() | nil,
-            fields: map()
+            fields: map(),
+            highlights: %{String.t() => [String.t()]}
           }
 
-    defstruct [:id, :score, :distance, :fields]
+    defstruct [:id, :score, :distance, :fields, highlights: %{}]
   end
 
   @type hits_list :: [[Hit.t()]]
@@ -149,6 +151,7 @@ defmodule Milvex.SearchResult do
     output_columns = parse_output_columns(data.fields_data)
 
     hits = build_flat_hits(ids, scores, distances, output_columns)
+    hits = attach_highlights(hits, data.highlight_results)
     group_hits_by_query(hits, topks)
   end
 
@@ -196,6 +199,34 @@ defmodule Milvex.SearchResult do
       |> Enum.zip(field_names)
       |> Map.new(fn {val, name} -> {name, val} end)
     end)
+  end
+
+  defp attach_highlights(hits, nil), do: hits
+  defp attach_highlights(hits, []), do: hits
+
+  defp attach_highlights(hits, highlight_results) do
+    highlights_per_hit = transpose_highlights(highlight_results, length(hits))
+
+    Enum.zip_with(hits, highlights_per_hit, fn hit, highlights ->
+      %{hit | highlights: highlights}
+    end)
+  end
+
+  defp transpose_highlights(highlight_results, hit_count) do
+    base = List.duplicate(%{}, hit_count)
+
+    Enum.reduce(highlight_results, base, fn %{field_name: field_name, datas: datas}, acc ->
+      datas
+      |> pad_list(hit_count, %HighlightData{fragments: [], scores: []})
+      |> Enum.zip(acc)
+      |> Enum.map(&merge_field_highlight(&1, field_name))
+    end)
+  end
+
+  defp merge_field_highlight({%{fragments: []}, hit_highlights}, _field_name), do: hit_highlights
+
+  defp merge_field_highlight({%{fragments: fragments}, hit_highlights}, field_name) do
+    Map.put(hit_highlights, field_name, fragments)
   end
 
   defp pad_list(list, target_len, _default) when length(list) >= target_len, do: list

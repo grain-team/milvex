@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.0](https://github.com/grain-team/milvex/compare/v0.7.0...v0.8.0) (2026-03-16)
+
+
+### Features
+
+* Implement filter templates ([31700e4](https://github.com/grain-team/milvex/commit/31700e48db233d7eb8817d4dd527db6068f5313f))
+* Implements Highlighting support ([f4f9dbf](https://github.com/grain-team/milvex/commit/f4f9dbf9e6bb7953bb248598d8a7b0ba3b4e908f))
+
+
+### Bug Fixes
+
+* Fixed doctor ([cea7f1d](https://github.com/grain-team/milvex/commit/cea7f1df4bd7b26dd0cbad0a5fbbc9f927e52378))
+* Fixed merge ([564d70d](https://github.com/grain-team/milvex/commit/564d70d71481f578bdbb831f85cfe05ed3dcdeb5))
+
 ## [0.7.0](https://github.com/grain-team/milvex/compare/v0.6.0...v0.7.0) (2026-03-12)
 
 

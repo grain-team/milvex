@@ -31,10 +31,11 @@ defmodule Milvex.AnnSearch do
           data: query_data(),
           limit: pos_integer(),
           params: map() | nil,
-          expr: String.t() | nil
+          expr: String.t() | nil,
+          expr_params: map() | nil
         }
 
-  defstruct [:anns_field, :data, :limit, :params, :expr]
+  defstruct [:anns_field, :data, :limit, :params, :expr, :expr_params]
 
   @doc """
   Creates a new ANN search request.
@@ -50,6 +51,7 @@ defmodule Milvex.AnnSearch do
     - `:limit` - (required) Maximum results for this sub-search
     - `:params` - Search parameters map (e.g., `%{nprobe: 10}`)
     - `:expr` - Filter expression string
+    - `:expr_params` - Template parameters map for the filter expression (e.g., `%{"min_year" => 2020}`)
 
   ## Examples
 
@@ -67,7 +69,8 @@ defmodule Milvex.AnnSearch do
          data: data,
          limit: limit,
          params: opts[:params],
-         expr: opts[:expr]
+         expr: opts[:expr],
+         expr_params: opts[:expr_params]
        }}
     end
   end

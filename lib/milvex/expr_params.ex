@@ -25,6 +25,11 @@ defmodule Milvex.ExprParams do
   alias Milvex.Milvus.Proto.Schema.TemplateArrayValue
   alias Milvex.Milvus.Proto.Schema.TemplateValue
 
+  @doc """
+  Converts a map of parameter names to Elixir values into a map of `TemplateValue` protobuf structs.
+
+  Returns an empty map when given `nil` or an empty map.
+  """
   @spec to_proto(map() | nil) :: %{String.t() => TemplateValue.t()}
   def to_proto(nil), do: %{}
   def to_proto(params) when map_size(params) == 0, do: %{}

@@ -831,8 +831,8 @@ defmodule Milvex do
         search_params: build_search_params(opts, vector_field),
         nq: length(vectors),
         consistency_level: get_consistency_level(opts),
-        highlighter: build_highlighter(Keyword.get(opts, :highlight)),
-        expr_template_values: ExprParams.to_proto(opts[:expr_params])
+        expr_template_values: ExprParams.to_proto(opts[:expr_params]),
+        highlighter: build_highlighter(Keyword.get(opts, :highlight))
       }
 
       with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :search, request),

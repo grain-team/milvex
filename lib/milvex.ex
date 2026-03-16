@@ -7,6 +7,7 @@ defmodule Milvex do
   alias Milvex.Data
   alias Milvex.Error
   alias Milvex.Errors.Invalid
+  alias Milvex.ExprParams
   alias Milvex.Highlighter, as: MilvexHighlighter
   alias Milvex.Index
   alias Milvex.QueryResult
@@ -596,6 +597,7 @@ defmodule Milvex do
     - `:db_name` - Database name (default: "")
     - `:partition_name` - Partition to delete from (default: "")
     - `:consistency_level` - Consistency level (default: `:Bounded`)
+    - `:expr_params` - Template parameters map for the filter expression
 
   ## Returns
 
@@ -605,6 +607,10 @@ defmodule Milvex do
   ## Examples
 
       {:ok, result} = Milvex.delete(conn, "movies", "id in [1, 2, 3]")
+
+      {:ok, result} = Milvex.delete(conn, "movies", "year < {cutoff}",
+        expr_params: %{"cutoff" => 2000}
+      )
   """
   @spec delete(GenServer.server(), collection_ref(), String.t(), keyword()) ::
           {:ok, %{delete_count: integer()}} | {:error, Error.t()}
@@ -615,7 +621,8 @@ defmodule Milvex do
         collection_name: resolve_collection_name(collection),
         partition_name: Keyword.get(opts, :partition_name, ""),
         expr: expr,
-        consistency_level: get_consistency_level(opts)
+        consistency_level: get_consistency_level(opts),
+        expr_template_values: ExprParams.to_proto(opts[:expr_params])
       }
 
       with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :delete, request),
@@ -691,6 +698,7 @@ defmodule Milvex do
     - `:limit` - Maximum number of results
     - `:offset` - Number of results to skip
     - `:consistency_level` - Consistency level (default: `:Bounded`)
+    - `:expr_params` - Template parameters map for the filter expression
 
   ## Returns
 
@@ -715,7 +723,8 @@ defmodule Milvex do
         output_fields: Keyword.get(opts, :output_fields, []),
         partition_names: Keyword.get(opts, :partition_names, []),
         query_params: build_query_params(opts),
-        consistency_level: get_consistency_level(opts)
+        consistency_level: get_consistency_level(opts),
+        expr_template_values: ExprParams.to_proto(opts[:expr_params])
       }
 
       with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :query, request),
@@ -752,6 +761,7 @@ defmodule Milvex do
     - `:db_name` - Database name (default: "")
     - `:consistency_level` - Consistency level (default: `:Bounded`)
     - `:highlight` - A `Milvex.Highlighter.t()` to enable search result highlighting
+    - `:expr_params` - Template parameters map for the filter expression
 
   ## Returns
 
@@ -764,6 +774,12 @@ defmodule Milvex do
         vector_field: "embedding",
         top_k: 10,
         output_fields: ["title", "year"]
+      )
+
+      {:ok, result} = Milvex.search(conn, "movies", [[0.1, 0.2, 0.3, ...]],
+        vector_field: "embedding",
+        filter: "year > {min_year} AND genre IN {genres}",
+        expr_params: %{"min_year" => 2020, "genres" => ["action", "sci-fi"]}
       )
 
       # Multiple queries with filter
@@ -815,7 +831,8 @@ defmodule Milvex do
         search_params: build_search_params(opts, vector_field),
         nq: length(vectors),
         consistency_level: get_consistency_level(opts),
-        highlighter: build_highlighter(Keyword.get(opts, :highlight))
+        highlighter: build_highlighter(Keyword.get(opts, :highlight)),
+        expr_template_values: ExprParams.to_proto(opts[:expr_params])
       }
 
       with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :search, request),
@@ -931,7 +948,8 @@ defmodule Milvex do
         dsl_type: :BoolExprV1,
         search_input: {:placeholder_group, placeholder_bytes},
         search_params: build_ann_search_params(search),
-        nq: length(search.data)
+        nq: length(search.data),
+        expr_template_values: ExprParams.to_proto(search.expr_params)
       }
 
       {:ok, request}

@@ -69,6 +69,25 @@ defmodule Milvex.AnnSearchTest do
     end
   end
 
+  describe "new/3 with expr_params" do
+    test "stores expr_params when provided" do
+      {:ok, search} =
+        AnnSearch.new("embedding", [[0.1, 0.2]],
+          limit: 10,
+          expr: "year > {min_year}",
+          expr_params: %{"min_year" => 2020}
+        )
+
+      assert search.expr_params == %{"min_year" => 2020}
+    end
+
+    test "defaults expr_params to nil when not provided" do
+      {:ok, search} = AnnSearch.new("embedding", [[0.1, 0.2]], limit: 10)
+
+      assert search.expr_params == nil
+    end
+  end
+
   describe "new/3 with mixed data" do
     test "returns {:error, _} when data mixes vectors and strings" do
       assert {:error, error} = AnnSearch.new("embedding", [[0.1, 0.2], "text"], limit: 10)

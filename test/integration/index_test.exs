@@ -197,6 +197,85 @@ defmodule Milvex.Integration.IndexTest do
     end
   end
 
+  describe "scalar index types" do
+    defp run_scalar_index_test(conn, field_name, index) do
+      name = unique_collection_name("scalar_idx")
+      schema = standard_schema(name)
+
+      :ok = Milvex.create_collection(conn, name, schema)
+
+      vector_index = Index.autoindex("embedding", :cosine)
+      :ok = Milvex.create_index(conn, name, vector_index)
+
+      assert :ok = Milvex.create_index(conn, name, index)
+
+      {:ok, descriptions} = Milvex.describe_index(conn, name)
+      assert Enum.any?(descriptions, fn desc -> desc.field_name == field_name end)
+
+      :ok = Milvex.load_collection(conn, name)
+
+      rows = sample_rows(10)
+      data = Data.from_rows!(rows, schema)
+      {:ok, _} = Milvex.insert(conn, name, data)
+
+      assert_eventually(
+        match?(
+          {:ok, %Milvex.QueryResult{rows: [_ | _]}},
+          Milvex.query(conn, name, "title != \"\"", output_fields: ["title"])
+        )
+      )
+
+      cleanup_collection(conn, name)
+    end
+
+    @tag index_type: :inverted
+    test "INVERTED index on varchar field", %{conn: conn} do
+      run_scalar_index_test(conn, "title", Index.inverted("title"))
+    end
+
+    @tag index_type: :inverted
+    test "INVERTED index with custom name", %{conn: conn} do
+      name = unique_collection_name("inv_named")
+      schema = standard_schema(name)
+
+      on_exit(fn -> cleanup_collection(conn, name) end)
+
+      :ok = Milvex.create_collection(conn, name, schema)
+
+      index = Index.inverted("title", name: "title_inverted_idx")
+      assert :ok = Milvex.create_index(conn, name, index)
+
+      {:ok, descriptions} = Milvex.describe_index(conn, name)
+      assert Enum.any?(descriptions, fn desc -> desc.index_name == "title_inverted_idx" end)
+    end
+
+    @tag index_type: :stl_sort
+    test "STL_SORT index on int64 field", %{conn: conn} do
+      name = unique_collection_name("stl_sort")
+      schema = manual_id_schema(name)
+
+      on_exit(fn -> cleanup_collection(conn, name) end)
+
+      :ok = Milvex.create_collection(conn, name, schema)
+
+      index = Index.stl_sort("id")
+      assert :ok = Milvex.create_index(conn, name, index)
+
+      {:ok, descriptions} = Milvex.describe_index(conn, name)
+      assert Enum.any?(descriptions, fn desc -> desc.field_name == "id" end)
+    end
+
+    @tag index_type: :trie
+    test "Trie index on varchar field", %{conn: conn} do
+      run_scalar_index_test(conn, "title", Index.trie("title"))
+    end
+
+    @tag index_type: :bitmap
+    test "BITMAP index on varchar field", %{conn: conn} do
+      run_scalar_index_test(conn, "title", Index.bitmap("title"))
+    end
+  end
+
   describe "metric types" do
     test "index with L2 (Euclidean) metric", %{conn: conn} do
       name = unique_collection_name("metric_l2")

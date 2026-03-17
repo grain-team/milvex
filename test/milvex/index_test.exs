@@ -427,6 +427,127 @@ defmodule Milvex.IndexTest do
     end
   end
 
+  describe "inverted/2" do
+    test "creates an INVERTED index" do
+      index = Index.inverted("category")
+      assert index.index_type == :inverted
+      assert index.metric_type == nil
+      assert index.field_name == "category"
+    end
+
+    test "accepts name option" do
+      index = Index.inverted("category", name: "cat_idx")
+      assert index.name == "cat_idx"
+    end
+  end
+
+  describe "stl_sort/2" do
+    test "creates an STL_SORT index" do
+      index = Index.stl_sort("price")
+      assert index.index_type == :stl_sort
+      assert index.metric_type == nil
+      assert index.field_name == "price"
+    end
+
+    test "accepts name option" do
+      index = Index.stl_sort("price", name: "price_idx")
+      assert index.name == "price_idx"
+    end
+  end
+
+  describe "trie/2" do
+    test "creates a Trie index" do
+      index = Index.trie("username")
+      assert index.index_type == :trie
+      assert index.metric_type == nil
+      assert index.field_name == "username"
+    end
+
+    test "accepts name option" do
+      index = Index.trie("username", name: "user_trie")
+      assert index.name == "user_trie"
+    end
+  end
+
+  describe "bitmap/2" do
+    test "creates a BITMAP index" do
+      index = Index.bitmap("status")
+      assert index.index_type == :bitmap
+      assert index.metric_type == nil
+      assert index.field_name == "status"
+    end
+
+    test "accepts name option" do
+      index = Index.bitmap("status", name: "status_bmp")
+      assert index.name == "status_bmp"
+    end
+  end
+
+  describe "scalar index new/2" do
+    test "creates scalar index without metric type" do
+      index = Index.new("field", :inverted)
+      assert index.metric_type == nil
+    end
+
+    test "accepts atom field names" do
+      index = Index.new(:field, :inverted)
+      assert index.field_name == "field"
+    end
+
+    test "supports all scalar index types" do
+      for type <- Index.scalar_index_types() do
+        index = Index.new("test", type)
+        assert index.index_type == type
+        assert index.metric_type == nil
+      end
+    end
+  end
+
+  describe "scalar index to_extra_params" do
+    test "does not include metric_type for scalar indexes" do
+      index = Index.inverted("category")
+      params = Index.to_extra_params(index)
+
+      assert Enum.any?(params, fn %KeyValuePair{key: k, value: v} ->
+               k == "index_type" and v == "INVERTED"
+             end)
+
+      refute Enum.any?(params, fn %KeyValuePair{key: k} -> k == "metric_type" end)
+    end
+
+    test "converts all scalar index types correctly" do
+      types = [
+        inverted: "INVERTED",
+        stl_sort: "STL_SORT",
+        trie: "Trie",
+        bitmap: "BITMAP"
+      ]
+
+      for {atom, string} <- types do
+        index = Index.new("field", atom)
+        params = Index.to_extra_params(index)
+
+        assert Enum.any?(params, fn %KeyValuePair{key: k, value: v} ->
+                 k == "index_type" and v == string
+               end)
+      end
+    end
+  end
+
+  describe "scalar index validate/1" do
+    test "returns ok for valid scalar index" do
+      index = Index.inverted("category")
+      assert {:ok, ^index} = Index.validate(index)
+    end
+
+    test "returns ok for all scalar index types" do
+      for type <- Index.scalar_index_types() do
+        index = Index.new("field", type)
+        assert {:ok, ^index} = Index.validate(index)
+      end
+    end
+  end
+
   describe "sparse_bm25 to_extra_params" do
     test "converts sparse_bm25 index to extra params" do
       index = Index.sparse_bm25("text_sparse")

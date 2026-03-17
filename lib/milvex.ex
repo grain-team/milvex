@@ -762,6 +762,12 @@ defmodule Milvex do
     - `:consistency_level` - Consistency level (default: `:Bounded`)
     - `:highlight` - A `Milvex.Highlighter.t()` to enable search result highlighting
     - `:expr_params` - Template parameters map for the filter expression
+    - `:offset` - Number of results to skip for pagination (limit + offset <= 16384)
+    - `:group_by_field` - Scalar field name to group results by
+    - `:group_size` - Number of entities per group (default 1)
+    - `:strict_group_size` - Boolean, enforce exact group_size per group
+    - `:round_decimal` - Round scores to N decimal places (-1 to disable)
+    - `:ignore_growing` - Boolean, skip growing segments during search
 
   ## Returns
 
@@ -1556,5 +1562,11 @@ defmodule Milvex do
       end
 
     params
+    |> maybe_add_param("offset", opts[:offset])
+    |> maybe_add_param("group_by_field", opts[:group_by_field])
+    |> maybe_add_param("group_size", opts[:group_size])
+    |> maybe_add_param("strict_group_size", opts[:strict_group_size])
+    |> maybe_add_param("round_decimal", opts[:round_decimal])
+    |> maybe_add_param("ignore_growing", opts[:ignore_growing])
   end
 end

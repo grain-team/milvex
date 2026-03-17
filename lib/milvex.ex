@@ -866,6 +866,12 @@ defmodule Milvex do
     - `:consistency_level` - Consistency level (default: `:Bounded`)
     - `:db_name` - Database name (default: "")
     - `:limit` - Maximum number of final results
+    - `:offset` - Number of results to skip for pagination
+    - `:group_by_field` - Scalar field name to group results by
+    - `:group_size` - Number of entities per group (default 1)
+    - `:strict_group_size` - Boolean, enforce exact group_size per group
+    - `:round_decimal` - Round scores to N decimal places (-1 to disable)
+    - `:ignore_growing` - Boolean, skip growing segments during search
 
   ## Examples
 
@@ -1009,7 +1015,7 @@ defmodule Milvex do
     [
       %KeyValuePair{key: "strategy", value: "weighted"},
       %KeyValuePair{key: "params", value: params}
-    ] ++ build_limit_params(opts)
+    ] ++ build_rank_pagination_params(opts)
   end
 
   defp build_rank_params(%RRFRanker{k: k}, opts) do
@@ -1018,7 +1024,7 @@ defmodule Milvex do
     [
       %KeyValuePair{key: "strategy", value: "rrf"},
       %KeyValuePair{key: "params", value: params}
-    ] ++ build_limit_params(opts)
+    ] ++ build_rank_pagination_params(opts)
   end
 
   defp build_function_score(%DecayRanker{} = ranker) do
@@ -1043,11 +1049,15 @@ defmodule Milvex do
     }
   end
 
-  defp build_limit_params(opts) do
-    case Keyword.get(opts, :limit) do
-      nil -> []
-      limit -> [%KeyValuePair{key: "limit", value: to_string(limit)}]
-    end
+  defp build_rank_pagination_params(opts) do
+    []
+    |> maybe_add_param("limit", opts[:limit])
+    |> maybe_add_param("offset", opts[:offset])
+    |> maybe_add_param("group_by_field", opts[:group_by_field])
+    |> maybe_add_param("group_size", opts[:group_size])
+    |> maybe_add_param("strict_group_size", opts[:strict_group_size])
+    |> maybe_add_param("round_decimal", opts[:round_decimal])
+    |> maybe_add_param("ignore_growing", opts[:ignore_growing])
   end
 
   defp build_highlighter(nil), do: nil

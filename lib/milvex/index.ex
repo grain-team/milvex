@@ -3,25 +3,30 @@ defmodule Milvex.Index do
   Builder for Milvus index configurations.
 
   Provides a fluent API for constructing index definitions with validation.
-  Supports all common Milvus index types and distance metrics.
+  Supports vector indexes, sparse indexes, and scalar field indexes.
 
-  ## Examples
+  ## Vector Index Examples
 
-      # Using builder
       index = Index.new("embedding", :hnsw, :cosine)
               |> Index.name("my_index")
               |> Index.params(%{M: 16, efConstruction: 256})
 
-      # Using smart constructors
       Index.flat("embedding", :l2)
       Index.ivf_flat("embedding", :ip, nlist: 1024)
       Index.hnsw("embedding", :cosine, m: 16, ef_construction: 256)
       Index.autoindex("embedding", :l2)
+
+  ## Scalar Index Examples
+
+      Index.inverted("category")
+      Index.stl_sort("price")
+      Index.trie("username")
+      Index.bitmap("status")
   """
 
   alias Milvex.Milvus.Proto.Common.KeyValuePair
 
-  @index_types [
+  @vector_index_types [
     :flat,
     :ivf_flat,
     :ivf_sq8,
@@ -35,17 +40,26 @@ defmodule Milvex.Index do
     :sparse_inverted_index
   ]
 
+  @scalar_index_types [
+    :inverted,
+    :stl_sort,
+    :trie,
+    :bitmap
+  ]
+
+  @index_types @vector_index_types ++ @scalar_index_types
+
   @metric_types [:l2, :ip, :cosine, :hamming, :jaccard, :max_sim_cosine, :max_sim_ip, :bm25]
 
   @index_schema Zoi.object(%{
                   name: Zoi.nullish(Zoi.string()),
                   field_name: Zoi.string() |> Zoi.min(1) |> Zoi.max(255),
                   index_type: Zoi.enum(@index_types),
-                  metric_type: Zoi.enum(@metric_types),
+                  metric_type: Zoi.nullish(Zoi.enum(@metric_types)),
                   params: Zoi.any() |> Zoi.optional() |> Zoi.default(%{})
                 })
 
-  @type index_type ::
+  @type vector_index_type ::
           :flat
           | :ivf_flat
           | :ivf_sq8
@@ -57,6 +71,14 @@ defmodule Milvex.Index do
           | :gpu_ivf_pq
           | :scann
           | :sparse_inverted_index
+
+  @type scalar_index_type ::
+          :inverted
+          | :stl_sort
+          | :trie
+          | :bitmap
+
+  @type index_type :: vector_index_type() | scalar_index_type()
 
   @type metric_type ::
           :l2
@@ -74,7 +96,7 @@ defmodule Milvex.Index do
           name: String.t() | nil,
           field_name: String.t(),
           index_type: index_type(),
-          metric_type: metric_type(),
+          metric_type: metric_type() | nil,
           params: map()
         }
 
@@ -87,7 +109,7 @@ defmodule Milvex.Index do
   ]
 
   @doc """
-  Creates a new index configuration.
+  Creates a new vector index configuration.
 
   ## Parameters
     - `field_name` - Name of the vector field to index
@@ -111,6 +133,37 @@ defmodule Milvex.Index do
 
   def new(field_name, index_type, metric_type) when is_atom(field_name) do
     new(Atom.to_string(field_name), index_type, metric_type)
+  end
+
+  @doc """
+  Creates a new scalar index configuration.
+
+  Scalar indexes do not require a metric type.
+
+  ## Parameters
+    - `field_name` - Name of the scalar field to index
+    - `index_type` - Type of scalar index (`:inverted`, `:stl_sort`, `:trie`, `:bitmap`)
+
+  ## Examples
+
+      Index.new("category", :inverted)
+      Index.new("age", :stl_sort)
+      Index.new("name", :trie)
+      Index.new("status", :bitmap)
+  """
+  @spec new(String.t(), scalar_index_type()) :: t()
+  def new(field_name, index_type)
+      when is_binary(field_name) and index_type in @scalar_index_types do
+    %__MODULE__{
+      field_name: field_name,
+      index_type: index_type,
+      metric_type: nil
+    }
+  end
+
+  def new(field_name, index_type)
+      when is_atom(field_name) and index_type in @scalar_index_types do
+    new(Atom.to_string(field_name), index_type)
   end
 
   @doc """
@@ -396,6 +449,84 @@ defmodule Milvex.Index do
   end
 
   @doc """
+  Creates an INVERTED index for scalar fields.
+
+  Supports all scalar field types: BOOL, INT8, INT16, INT32, INT64,
+  FLOAT, DOUBLE, VARCHAR, JSON, and ARRAY.
+
+  ## Options
+    - `:name` - Index name (optional)
+
+  ## Examples
+
+      Index.inverted("category")
+      Index.inverted("category", name: "category_idx")
+  """
+  @spec inverted(String.t(), keyword()) :: t()
+  def inverted(field_name, opts \\ []) do
+    index = new(field_name, :inverted)
+    if index_name = Keyword.get(opts, :name), do: name(index, index_name), else: index
+  end
+
+  @doc """
+  Creates an STL_SORT index for numeric scalar fields.
+
+  Supports numeric types: INT8, INT16, INT32, INT64, FLOAT, DOUBLE.
+
+  ## Options
+    - `:name` - Index name (optional)
+
+  ## Examples
+
+      Index.stl_sort("price")
+      Index.stl_sort("timestamp", name: "ts_idx")
+  """
+  @spec stl_sort(String.t(), keyword()) :: t()
+  def stl_sort(field_name, opts \\ []) do
+    index = new(field_name, :stl_sort)
+    if index_name = Keyword.get(opts, :name), do: name(index, index_name), else: index
+  end
+
+  @doc """
+  Creates a Trie index for VARCHAR fields.
+
+  Optimized for prefix matching queries on string fields.
+
+  ## Options
+    - `:name` - Index name (optional)
+
+  ## Examples
+
+      Index.trie("username")
+      Index.trie("email", name: "email_trie_idx")
+  """
+  @spec trie(String.t(), keyword()) :: t()
+  def trie(field_name, opts \\ []) do
+    index = new(field_name, :trie)
+    if index_name = Keyword.get(opts, :name), do: name(index, index_name), else: index
+  end
+
+  @doc """
+  Creates a BITMAP index for low-cardinality scalar fields.
+
+  Supports BOOL, INT8, INT16, INT32, INT64, VARCHAR, and ARRAY fields.
+  Not supported for FLOAT, DOUBLE, or JSON types.
+
+  ## Options
+    - `:name` - Index name (optional)
+
+  ## Examples
+
+      Index.bitmap("status")
+      Index.bitmap("is_active", name: "active_bitmap_idx")
+  """
+  @spec bitmap(String.t(), keyword()) :: t()
+  def bitmap(field_name, opts \\ []) do
+    index = new(field_name, :bitmap)
+    if index_name = Keyword.get(opts, :name), do: name(index, index_name), else: index
+  end
+
+  @doc """
   Validates the index configuration.
 
   Returns `{:ok, index}` if valid, `{:error, error}` otherwise.
@@ -473,6 +604,14 @@ defmodule Milvex.Index do
   Returns a list of KeyValuePair structs for use in CreateIndexRequest.
   """
   @spec to_extra_params(t()) :: [KeyValuePair.t()]
+  def to_extra_params(%__MODULE__{metric_type: nil} = index) do
+    params = [
+      %KeyValuePair{key: "index_type", value: index_type_to_string(index.index_type)}
+    ]
+
+    params ++ params_to_key_value_pairs(index.params)
+  end
+
   def to_extra_params(%__MODULE__{} = index) do
     params = [
       %KeyValuePair{key: "index_type", value: index_type_to_string(index.index_type)},
@@ -500,6 +639,10 @@ defmodule Milvex.Index do
   defp index_type_to_string(:gpu_ivf_pq), do: "GPU_IVF_PQ"
   defp index_type_to_string(:scann), do: "SCANN"
   defp index_type_to_string(:sparse_inverted_index), do: "SPARSE_INVERTED_INDEX"
+  defp index_type_to_string(:inverted), do: "INVERTED"
+  defp index_type_to_string(:stl_sort), do: "STL_SORT"
+  defp index_type_to_string(:trie), do: "Trie"
+  defp index_type_to_string(:bitmap), do: "BITMAP"
 
   defp metric_type_to_string(:l2), do: "L2"
   defp metric_type_to_string(:ip), do: "IP"
@@ -525,4 +668,16 @@ defmodule Milvex.Index do
   """
   @spec metric_types() :: [metric_type()]
   def metric_types, do: @metric_types
+
+  @doc """
+  Returns list of scalar index types.
+  """
+  @spec scalar_index_types() :: [scalar_index_type()]
+  def scalar_index_types, do: @scalar_index_types
+
+  @doc """
+  Returns list of vector index types.
+  """
+  @spec vector_index_types() :: [vector_index_type()]
+  def vector_index_types, do: @vector_index_types
 end

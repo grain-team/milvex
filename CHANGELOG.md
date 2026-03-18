@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.9.0](https://github.com/grain-team/milvex/compare/v0.8.0...v0.9.0) (2026-03-18)
+
+
+### Features
+
+* add offset, grouping, and misc params to hybrid search ([f87208a](https://github.com/grain-team/milvex/commit/f87208ae36d1893fe026eba6ec4691dbe7c58983))
+* add offset, grouping, and misc params to vector search ([116d8fe](https://github.com/grain-team/milvex/commit/116d8fecb90f3d79d23d37f4f257de186acf54d9))
+* Adds support to scalar indexes ([b48f2c0](https://github.com/grain-team/milvex/commit/b48f2c03751fd8bdb889c437b328db94e51e8a20))
+
 ## [0.8.0](https://github.com/grain-team/milvex/compare/v0.7.0...v0.8.0) (2026-03-16)
 
 

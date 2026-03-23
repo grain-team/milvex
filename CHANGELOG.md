@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.2](https://github.com/grain-team/milvex/compare/v0.9.1...v0.9.2) (2026-03-23)
+
+
+### Bug Fixes
+
+* Add bounded error_type to the error telemetries ([e5ea579](https://github.com/grain-team/milvex/commit/e5ea57923208912499011a5ece7bcbee404e91ed))
+
 ## [0.9.1](https://github.com/grain-team/milvex/compare/v0.9.0...v0.9.1) (2026-03-23)
 
 

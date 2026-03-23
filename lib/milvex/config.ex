@@ -67,6 +67,39 @@ defmodule Milvex.Config do
                        |> Zoi.max(1.0)
                        |> Zoi.optional()
                        |> Zoi.default(0.1),
+                     retry_max_attempts:
+                       Zoi.integer(
+                         description:
+                           "Maximum number of retry attempts for transient gRPC errors (0 to disable)"
+                       )
+                       |> Zoi.min(0)
+                       |> Zoi.max(50)
+                       |> Zoi.optional()
+                       |> Zoi.default(5),
+                     retry_base_delay:
+                       Zoi.integer(
+                         description: "Initial backoff delay in milliseconds for RPC retries"
+                       )
+                       |> Zoi.min(10)
+                       |> Zoi.max(10_000)
+                       |> Zoi.optional()
+                       |> Zoi.default(100),
+                     retry_max_delay:
+                       Zoi.integer(
+                         description: "Maximum backoff delay in milliseconds for RPC retries"
+                       )
+                       |> Zoi.min(100)
+                       |> Zoi.max(30_000)
+                       |> Zoi.optional()
+                       |> Zoi.default(3_000),
+                     retry_timeout:
+                       Zoi.integer(
+                         description: "Total time budget in milliseconds for all retry attempts"
+                       )
+                       |> Zoi.min(1_000)
+                       |> Zoi.max(60_000)
+                       |> Zoi.optional()
+                       |> Zoi.default(15_000),
                      adapter:
                        Zoi.any(description: "GRPC client adapter module")
                        |> Zoi.optional()

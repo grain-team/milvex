@@ -27,6 +27,7 @@ defmodule Milvex.RPC do
   alias Milvex.Errors.Connection
   alias Milvex.Errors.Grpc
   alias Milvex.Milvus.Proto.Common.Status
+  alias Milvex.Retry
   alias Milvex.Telemetry
 
   @type rpc_result :: {:ok, struct()} | {:error, Error.t()}
@@ -54,8 +55,18 @@ defmodule Milvex.RPC do
   """
   @spec call(GRPC.Channel.t(), module(), atom(), struct(), keyword()) :: rpc_result()
   def call(channel, stub_module, method, request, opts \\ []) do
-    metadata = Telemetry.rpc_metadata(method, stub_module, request)
+    {retry_opts, grpc_opts} = Retry.split_opts(opts)
 
+    telemetry_metadata = Telemetry.rpc_metadata(method, stub_module, request)
+
+    Retry.with_retry(
+      fn -> do_call(channel, stub_module, method, request, grpc_opts, telemetry_metadata) end,
+      retry_opts,
+      telemetry_metadata
+    )
+  end
+
+  defp do_call(channel, stub_module, method, request, opts, metadata) do
     Telemetry.rpc_span(metadata, fn ->
       case apply(stub_module, method, [channel, request, opts]) do
         {:ok, response} ->

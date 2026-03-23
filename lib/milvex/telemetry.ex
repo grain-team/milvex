@@ -42,6 +42,16 @@ defmodule Milvex.Telemetry do
         `:grpc`, `:invalid`, `:argument`, `:timeout`, `:closed`,
         `:econnrefused`, `:econnreset`, or `:unknown`
 
+  ### `[:milvex, :rpc, :retry]`
+
+  Emitted when an RPC call required retries (only if at least one retry occurred).
+
+    * Measurements: `%{attempts: integer()}` (number of retries, not counting the initial attempt)
+    * Metadata:
+      * `:method` - The RPC method atom
+      * `:stub` - The gRPC stub module
+      * `:collection` - The collection name (or `nil`)
+
   ## Connection Lifecycle Events
 
   Emitted via `:telemetry.execute/3` from `Milvex.Connection`.

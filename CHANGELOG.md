@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.10.0](https://github.com/grain-team/milvex/compare/v0.9.2...v0.10.0) (2026-03-23)
+
+
+### Features
+
+* Added retry mechanism ([5711aeb](https://github.com/grain-team/milvex/commit/5711aeb529d9f02bec0881ce36888d7f734bbafb))
+
+
+### Bug Fixes
+
+* Merging with the app configs ([124f4bb](https://github.com/grain-team/milvex/commit/124f4bb67fcd18a19f93b853ed302ff7ddfea83a))
+* Passing the settings correctly ([6e69911](https://github.com/grain-team/milvex/commit/6e69911ad577379de34404a97d9d335a26fd55c1))
+
 ## [0.9.2](https://github.com/grain-team/milvex/compare/v0.9.1...v0.9.2) (2026-03-23)
 
 

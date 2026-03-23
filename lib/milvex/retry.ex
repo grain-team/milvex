@@ -154,8 +154,8 @@ defmodule Milvex.Retry do
 
   defp compute_delay(_attempt, _base_delay, _max_delay, _timeout, _elapsed), do: 0
 
-  defp maybe_log_retry(attempt, delay) when attempt >= 2 do
-    Logger.info("RPC retry attempt #{attempt + 1}, backoff #{delay}ms")
+  defp maybe_log_retry(attempt, delay) when attempt >= 3 do
+    Logger.warning("RPC retry attempt #{attempt + 1}, backoff #{delay}ms")
   end
 
   defp maybe_log_retry(_attempt, _delay), do: :ok

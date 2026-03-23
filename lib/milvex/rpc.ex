@@ -53,9 +53,13 @@ defmodule Milvex.RPC do
       RPC.call(channel, MilvusService.Stub, :show_collections, request)
       RPC.call(channel, MilvusService.Stub, :create_collection, request, timeout: 30_000)
   """
+  @retry_keys [:retry_max_attempts, :retry_base_delay, :retry_max_delay, :retry_timeout]
+  @grpc_keys [:timeout, :metadata, :content_type, :compressor]
+
   @spec call(GRPC.Channel.t(), module(), atom(), struct(), keyword()) :: rpc_result()
   def call(channel, stub_module, method, request, opts \\ []) do
-    {retry_opts, grpc_opts} = Retry.split_opts(opts)
+    retry_opts = Keyword.take(opts, @retry_keys)
+    grpc_opts = Keyword.take(opts, @grpc_keys)
 
     telemetry_metadata = Telemetry.rpc_metadata(method, stub_module, request)
 

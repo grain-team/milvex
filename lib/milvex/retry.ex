@@ -108,21 +108,6 @@ defmodule Milvex.Retry do
   def retryable?(%ConnectionError{retriable: true}), do: true
   def retryable?(_), do: false
 
-  @doc """
-  Extracts retry-specific options from a keyword list.
-
-  Returns `{retry_opts, remaining_opts}`.
-  """
-  @spec split_opts(keyword()) :: {retry_opts(), keyword()}
-  def split_opts(opts) do
-    Keyword.split(opts, [
-      :retry_max_attempts,
-      :retry_base_delay,
-      :retry_max_delay,
-      :retry_timeout
-    ])
-  end
-
   defp do_retry(fun, attempt, max_attempts, base_delay, max_delay, timeout, start_time) do
     case fun.() do
       {:error, error} when attempt < max_attempts ->

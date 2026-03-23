@@ -111,7 +111,7 @@ defmodule Milvex.HybridSearchTest do
 
       stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
-      stub(RPC, :call, fn _channel, _stub, method, request ->
+      stub(RPC, :call, fn _channel, _stub, method, request, _opts ->
         case method do
           :describe_collection ->
             @describe_response
@@ -146,7 +146,7 @@ defmodule Milvex.HybridSearchTest do
 
       stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
 
-      stub(RPC, :call, fn _channel, _stub, method, request ->
+      stub(RPC, :call, fn _channel, _stub, method, request, _opts ->
         case method do
           :describe_collection ->
             @describe_response

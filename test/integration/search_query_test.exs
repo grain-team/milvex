@@ -1,5 +1,21 @@
+defmodule Milvex.Integration.SearchQueryTest.MoviesCollection do
+  use Milvex.Collection
+
+  collection do
+    name "module_search_test"
+
+    fields do
+      primary_key :id, :int64, auto_id: true
+      varchar :title, 256
+      vector :embedding, 4
+    end
+  end
+end
+
 defmodule Milvex.Integration.SearchQueryTest do
   use Milvex.IntegrationCase, async: false
+
+  alias Milvex.Integration.SearchQueryTest.MoviesCollection
 
   @moduletag :integration
 
@@ -405,6 +421,67 @@ defmodule Milvex.Integration.SearchQueryTest do
                limit: 20
              ) do
           {:ok, result} -> length(result.rows) == 3
+          _ -> false
+        end
+      end)
+    end
+  end
+
+  describe "search with Collection module" do
+    setup %{conn: conn} do
+      name = Milvex.Collection.collection_name(MoviesCollection)
+      schema = Milvex.Collection.to_schema(MoviesCollection)
+
+      :ok = Milvex.create_collection(conn, name, schema)
+
+      :ok =
+        Milvex.create_index(conn, name, "embedding",
+          index_type: "AUTOINDEX",
+          metric_type: "COSINE"
+        )
+
+      rows = [
+        %{title: "The Matrix", embedding: [1.0, 0.0, 0.0, 0.0]},
+        %{title: "Inception", embedding: [0.0, 1.0, 0.0, 0.0]},
+        %{title: "Interstellar", embedding: [0.0, 0.0, 1.0, 0.0]}
+      ]
+
+      data = Data.from_rows!(rows, schema)
+      {:ok, _} = Milvex.insert(conn, name, data)
+      :ok = Milvex.load_collection(conn, name)
+
+      on_exit(fn -> cleanup_collection(conn, name) end)
+
+      :ok
+    end
+
+    test "search using Collection module", %{conn: conn} do
+      assert_eventually(
+        match?(
+          {:ok, %{num_queries: 1, hits: [_ | _]}},
+          Milvex.search(conn, MoviesCollection, [[1.0, 0.0, 0.0, 0.0]],
+            vector_field: "embedding",
+            top_k: 3
+          )
+        )
+      )
+    end
+
+    test "search returns correct results with Collection module", %{conn: conn} do
+      get_title = fn hit ->
+        Map.get(hit.fields, "title") || Map.get(hit.fields, :title)
+      end
+
+      assert_eventually(fn ->
+        with {:ok, result} <-
+               Milvex.search(conn, MoviesCollection, [[1.0, 0.0, 0.0, 0.0]],
+                 vector_field: "embedding",
+                 top_k: 1,
+                 output_fields: ["title"]
+               ),
+             [[hit | _]] <- result.hits do
+          get_title.(hit) == "The Matrix"
+        else
           _ -> false
         end
       end)

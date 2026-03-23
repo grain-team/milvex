@@ -2,6 +2,8 @@ defmodule Milvex do
   @external_resource "README.md"
   @moduledoc File.read!("README.md")
 
+  require Logger
+
   alias Milvex.AnnSearch
   alias Milvex.Connection
   alias Milvex.Data
@@ -823,8 +825,8 @@ defmodule Milvex do
 
     with {:ok, vector_field} <- require_option(opts, :vector_field),
          {:ok, channel} <- Connection.get_channel(conn, opts),
-         {:ok, info} <- describe_collection(conn, collection_name, opts),
-         {:ok, field, is_nested} <- find_vector_field(info.schema, vector_field),
+         {:ok, schema} <- resolve_schema(conn, collection, collection_name, opts),
+         {:ok, field, is_nested} <- find_vector_field(schema, vector_field),
          {:ok, placeholder_bytes} <- build_ann_placeholder_group(vectors, field, is_nested) do
       request = %SearchRequest{
         db_name: get_db_name(opts),
@@ -920,8 +922,8 @@ defmodule Milvex do
     collection_name = resolve_collection_name(collection)
 
     with {:ok, channel} <- Connection.get_channel(conn, opts),
-         {:ok, info} <- describe_collection(conn, collection_name, opts),
-         {:ok, search_requests} <- build_search_requests(searches, info.schema) do
+         {:ok, schema} <- resolve_schema(conn, collection, collection_name, opts),
+         {:ok, search_requests} <- build_search_requests(searches, schema) do
       request = %HybridSearchRequest{
         db_name: get_db_name(opts),
         collection_name: collection_name,
@@ -1331,6 +1333,22 @@ defmodule Milvex do
 
   defp resolve_collection_name(module) when is_atom(module) do
     Milvex.Collection.collection_name(module)
+  end
+
+  defp resolve_schema(_conn, module, _collection_name, _opts) when is_atom(module) do
+    {:ok, Milvex.Collection.to_schema(module)}
+  end
+
+  defp resolve_schema(conn, name, collection_name, opts) when is_binary(name) do
+    Logger.warning(
+      "Passing a collection name string to search/hybrid_search triggers a " <>
+        "describe_collection RPC on every call. Pass a Collection module instead. " <>
+        "String-based schema resolution will be deprecated in a future version."
+    )
+
+    with {:ok, info} <- describe_collection(conn, collection_name, opts) do
+      {:ok, info.schema}
+    end
   end
 
   defp get_db_name(opts), do: Keyword.get(opts, :db_name, "")

@@ -1,8 +1,24 @@
+defmodule Milvex.Integration.HybridSearchTest.HybridCollection do
+  use Milvex.Collection
+
+  collection do
+    name "module_hybrid_search_test"
+
+    fields do
+      primary_key :id, :int64, auto_id: true
+      varchar :title, 512
+      vector :text_embedding, 4
+      vector :image_embedding, 4
+    end
+  end
+end
+
 defmodule Milvex.Integration.HybridSearchTest do
   use Milvex.IntegrationCase
 
   alias Milvex.AnnSearch
   alias Milvex.Index
+  alias Milvex.Integration.HybridSearchTest.HybridCollection
   alias Milvex.Ranker
   alias Milvex.Schema
   alias Milvex.Schema.Field
@@ -202,6 +218,52 @@ defmodule Milvex.Integration.HybridSearchTest do
           assert String.starts_with?(hit.fields["title"], "Red")
         end
       end
+    end
+  end
+
+  describe "hybrid_search with Collection module" do
+    setup %{conn: conn} do
+      name = Milvex.Collection.collection_name(HybridCollection)
+      schema = Milvex.Collection.to_schema(HybridCollection)
+
+      :ok = Milvex.create_collection(conn, name, schema)
+      :ok = Milvex.create_index(conn, name, Index.autoindex("text_embedding", :cosine))
+      :ok = Milvex.create_index(conn, name, Index.autoindex("image_embedding", :cosine))
+      :ok = Milvex.load_collection(conn, name)
+
+      data = [
+        %{
+          title: "Red shirt",
+          text_embedding: [1.0, 0.0, 0.0, 0.0],
+          image_embedding: [0.0, 1.0, 0.0, 0.0]
+        },
+        %{
+          title: "Blue pants",
+          text_embedding: [0.0, 1.0, 0.0, 0.0],
+          image_embedding: [0.0, 0.0, 1.0, 0.0]
+        }
+      ]
+
+      {:ok, _} = Milvex.insert(conn, name, data)
+      Process.sleep(1000)
+
+      on_exit(fn -> cleanup_collection(conn, name) end)
+
+      :ok
+    end
+
+    test "hybrid search using Collection module", %{conn: conn} do
+      {:ok, text_search} = AnnSearch.new("text_embedding", [[1.0, 0.0, 0.0, 0.0]], limit: 3)
+      {:ok, image_search} = AnnSearch.new("image_embedding", [[0.0, 1.0, 0.0, 0.0]], limit: 3)
+      {:ok, ranker} = Ranker.rrf()
+
+      {:ok, results} =
+        Milvex.hybrid_search(conn, HybridCollection, [text_search, image_search], ranker,
+          output_fields: ["title"],
+          limit: 3
+        )
+
+      refute Enum.empty?(results.hits)
     end
   end
 end

@@ -2,6 +2,8 @@ defmodule Milvex.SearchTest do
   use ExUnit.Case
   use Mimic
 
+  @moduletag :capture_log
+
   alias Milvex.Connection
   alias Milvex.Highlighter
   alias Milvex.RPC

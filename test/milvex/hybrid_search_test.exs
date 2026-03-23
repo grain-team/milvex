@@ -2,6 +2,8 @@ defmodule Milvex.HybridSearchTest do
   use ExUnit.Case, async: true
   use Mimic
 
+  @moduletag :capture_log
+
   alias Milvex.AnnSearch
   alias Milvex.Connection
   alias Milvex.Ranker

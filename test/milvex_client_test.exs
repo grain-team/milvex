@@ -3,10 +3,12 @@ defmodule MilvexClientTest do
 
   use Mimic
 
+  alias Milvex.AnnSearch
   alias Milvex.Connection
   alias Milvex.Data
   alias Milvex.Error
   alias Milvex.Index
+  alias Milvex.Ranker
   alias Milvex.RPC
   alias Milvex.Schema
   alias Milvex.Schema.Field
@@ -504,6 +506,8 @@ defmodule MilvexClientTest do
   end
 
   describe "search/4" do
+    @describetag :capture_log
+
     test "requires vector_field option" do
       assert {:error, error} = Milvex.search(:conn, "test", [[0.1, 0.2, 0.3, 0.4]])
       assert error.field == :vector_field
@@ -998,6 +1002,60 @@ defmodule MilvexClientTest do
       end)
 
       assert {:ok, ["_default"]} = Milvex.list_partitions(:conn, MilvexClientTest.TestCollection)
+    end
+
+    test "search with module skips describe_collection" do
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
+
+      stub(RPC, :call, fn _channel, _stub, method, _request ->
+        case method do
+          :describe_collection ->
+            flunk("describe_collection should not be called when using a Collection module")
+
+          :search ->
+            {:ok,
+             %SearchResults{
+               status: %Status{code: 0},
+               results: nil,
+               collection_name: "test_movies"
+             }}
+        end
+      end)
+
+      assert {:ok, result} =
+               Milvex.search(:conn, MilvexClientTest.TestCollection, [[0.1, 0.2, 0.3, 0.4]],
+                 vector_field: "embedding",
+                 top_k: 10
+               )
+
+      assert %Milvex.SearchResult{} = result
+    end
+
+    test "hybrid_search with module skips describe_collection" do
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
+
+      stub(RPC, :call, fn _channel, _stub, method, _request ->
+        case method do
+          :describe_collection ->
+            flunk("describe_collection should not be called when using a Collection module")
+
+          :hybrid_search ->
+            {:ok,
+             %SearchResults{
+               status: %Status{code: 0},
+               results: nil,
+               collection_name: "test_movies"
+             }}
+        end
+      end)
+
+      {:ok, search} = AnnSearch.new("embedding", [[0.1, 0.2, 0.3, 0.4]], limit: 10)
+      {:ok, ranker} = Ranker.rrf()
+
+      assert {:ok, result} =
+               Milvex.hybrid_search(:conn, MilvexClientTest.TestCollection, [search], ranker)
+
+      assert %Milvex.SearchResult{} = result
     end
   end
 

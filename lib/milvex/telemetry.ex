@@ -35,8 +35,12 @@ defmodule Milvex.Telemetry do
     * Measurements: `%{duration: integer()}` (in native time units)
     * Metadata: same as `:start` plus:
       * `:kind` - The exception kind (`:error`, `:exit`, `:throw`)
-      * `:reason` - The exception reason
+      * `:reason` - The raw exception reason
       * `:stacktrace` - The stacktrace
+      * `:error_type` - Normalized error classification atom with bounded
+        cardinality, safe for use as a metric tag. One of: `:connection`,
+        `:grpc`, `:invalid`, `:argument`, `:timeout`, `:closed`,
+        `:econnrefused`, `:econnreset`, or `:unknown`
 
   ## Connection Lifecycle Events
 
@@ -99,8 +103,9 @@ defmodule Milvex.Telemetry do
     * Measurements: `%{duration: integer()}` (in native time units)
     * Metadata: same as `:start` plus:
       * `:kind` - The exception kind
-      * `:reason` - The exception reason
+      * `:reason` - The raw exception reason
       * `:stacktrace` - The stacktrace
+      * `:error_type` - Normalized error classification atom (see RPC exception docs)
 
   ## Example
 
@@ -131,7 +136,7 @@ defmodule Milvex.Telemetry do
 
   @doc false
   def rpc_span(metadata, fun) do
-    :telemetry.span([:milvex, :rpc], metadata, fun)
+    span([:milvex, :rpc], metadata, fun)
   end
 
   @doc false
@@ -163,7 +168,54 @@ defmodule Milvex.Telemetry do
 
   @doc false
   def data_encode_span(metadata, fun) do
-    :telemetry.span([:milvex, :data, :encode], metadata, fun)
+    span([:milvex, :data, :encode], metadata, fun)
+  end
+
+  @doc false
+  def classify_error(%Milvex.Errors.Connection{}), do: :connection
+  def classify_error(%Milvex.Errors.Grpc{}), do: :grpc
+  def classify_error(%Milvex.Errors.Invalid{}), do: :invalid
+  def classify_error(%ArgumentError{}), do: :argument
+  def classify_error(%GRPC.RPCError{}), do: :grpc
+  def classify_error(:timeout), do: :timeout
+  def classify_error(:closed), do: :closed
+  def classify_error(:econnrefused), do: :econnrefused
+  def classify_error(:econnreset), do: :econnreset
+  def classify_error(_), do: :unknown
+
+  defp span(event_prefix, start_metadata, fun) do
+    start_time = :erlang.monotonic_time()
+
+    :telemetry.execute(
+      event_prefix ++ [:start],
+      %{system_time: System.system_time()},
+      start_metadata
+    )
+
+    try do
+      {result, stop_metadata} = fun.()
+
+      :telemetry.execute(
+        event_prefix ++ [:stop],
+        %{duration: :erlang.monotonic_time() - start_time},
+        stop_metadata
+      )
+
+      result
+    catch
+      kind, reason ->
+        :telemetry.execute(
+          event_prefix ++ [:exception],
+          %{duration: :erlang.monotonic_time() - start_time},
+          start_metadata
+          |> Map.put(:kind, kind)
+          |> Map.put(:reason, reason)
+          |> Map.put(:stacktrace, __STACKTRACE__)
+          |> Map.put(:error_type, classify_error(reason))
+        )
+
+        :erlang.raise(kind, reason, __STACKTRACE__)
+    end
   end
 
   defp extract_collection(request) when is_struct(request) do

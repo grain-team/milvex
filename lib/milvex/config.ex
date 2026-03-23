@@ -152,6 +152,15 @@ defmodule Milvex.Config do
   def schema, do: @config_schema
 
   @doc """
+  Returns the default configuration with all default values applied.
+  """
+  @spec defaults() :: t()
+  def defaults do
+    {:ok, config} = parse(%{})
+    config
+  end
+
+  @doc """
   Parse and validate configuration from keyword list or map.
 
   Returns `{:ok, config}` on success or `{:error, error}` on validation failure.
@@ -352,6 +361,28 @@ defmodule Milvex.Config do
 
   defp apply_default_port(config) do
     Map.put_new(config, :port, 19_530)
+  end
+
+  @rpc_config_keys [
+    :retry_max_attempts,
+    :retry_base_delay,
+    :retry_max_delay,
+    :retry_timeout,
+    :timeout
+  ]
+
+  @doc """
+  Merges RPC-relevant defaults from a config map with user-provided opts.
+
+  Extracts retry and timeout keys from the connection config and uses them
+  as defaults. User-provided opts take precedence.
+  """
+  @spec merge_rpc_opts(t(), keyword()) :: keyword()
+  def merge_rpc_opts(config, opts) do
+    config
+    |> Map.take(@rpc_config_keys)
+    |> Enum.into([])
+    |> Keyword.merge(opts)
   end
 
   @doc """

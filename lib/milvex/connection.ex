@@ -85,13 +85,13 @@ defmodule Milvex.Connection do
   end
 
   @doc """
-  Gets the gRPC channel and call options from the connection.
+  Gets the gRPC channel and connection config from the connection.
 
-  Returns `{:ok, channel, call_opts}` if connected, or `{:error, error}` if not connected.
-  The `call_opts` keyword list contains options to pass to gRPC calls, including `:timeout`.
+  Returns `{:ok, channel, config}` if connected, or `{:error, error}` if not connected.
+  The `config` map contains the full `Milvex.Config.t()` used by this connection.
   """
   @spec get_channel(GenServer.server(), keyword()) ::
-          {:ok, GRPC.Channel.t()} | {:error, Milvex.Error.t()}
+          {:ok, GRPC.Channel.t(), Config.t()} | {:error, Milvex.Error.t()}
   def get_channel(conn, opts \\ []) do
     timeout = Keyword.get(opts, :timeout, 5_000)
     GenStateMachine.call(conn, :get_channel, timeout)
@@ -198,7 +198,7 @@ defmodule Milvex.Connection do
   end
 
   def connected({:call, from}, :get_channel, data) do
-    {:keep_state_and_data, [{:reply, from, {:ok, data.channel}}]}
+    {:keep_state_and_data, [{:reply, from, {:ok, data.channel, data.config}}]}
   end
 
   def connected({:call, from}, :connected?, _data) do

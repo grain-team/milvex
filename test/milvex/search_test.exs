@@ -16,6 +16,7 @@ defmodule Milvex.SearchTest do
   alias Milvex.Milvus.Proto.Schema.FieldSchema
 
   @channel %GRPC.Channel{host: "localhost", port: 19_530}
+  @config Milvex.Config.defaults()
 
   @describe_response {:ok,
                       %DescribeCollectionResponse{
@@ -56,7 +57,7 @@ defmodule Milvex.SearchTest do
       {:ok, highlighter} = Highlighter.lexical("text_field")
       test_pid = self()
 
-      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel, @config} end)
 
       stub(RPC, :call, fn _channel, _stub, method, request, _opts ->
         case method do
@@ -90,7 +91,7 @@ defmodule Milvex.SearchTest do
     test "sends nil highlighter when highlight option is not provided" do
       test_pid = self()
 
-      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel, @config} end)
 
       stub(RPC, :call, fn _channel, _stub, method, request, _opts ->
         case method do
@@ -114,7 +115,7 @@ defmodule Milvex.SearchTest do
       {:ok, highlighter} = Highlighter.lexical("text_field", pre_tag: "<em>", post_tag: "</em>")
       test_pid = self()
 
-      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel, @config} end)
 
       stub(RPC, :call, fn _channel, _stub, method, request, _opts ->
         case method do
@@ -147,7 +148,7 @@ defmodule Milvex.SearchTest do
     test "offset is included in search_params" do
       test_pid = self()
 
-      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel, @config} end)
 
       stub(RPC, :call, fn _channel, _stub, method, request, _opts ->
         case method do
@@ -175,7 +176,7 @@ defmodule Milvex.SearchTest do
     test "grouping params are included in search_params" do
       test_pid = self()
 
-      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel, @config} end)
 
       stub(RPC, :call, fn _channel, _stub, method, request, _opts ->
         case method do
@@ -212,7 +213,7 @@ defmodule Milvex.SearchTest do
     test "round_decimal and ignore_growing are included in search_params" do
       test_pid = self()
 
-      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel, @config} end)
 
       stub(RPC, :call, fn _channel, _stub, method, request, _opts ->
         case method do
@@ -245,7 +246,7 @@ defmodule Milvex.SearchTest do
     test "optional params are omitted when not provided" do
       test_pid = self()
 
-      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel, @config} end)
 
       stub(RPC, :call, fn _channel, _stub, method, request, _opts ->
         case method do

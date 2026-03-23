@@ -16,7 +16,7 @@ defmodule Milvex.ExprParamsIntegrationTest do
       params = %{"min_year" => 2020, "genres" => ["action", "sci-fi"]}
       expected_proto = ExprParams.to_proto(params)
 
-      stub(Connection, :get_channel, fn _, _ -> {:ok, :channel} end)
+      stub(Connection, :get_channel, fn _, _ -> {:ok, :channel, Milvex.Config.defaults()} end)
 
       expect(RPC, :call, fn :channel, _, :query, request, _opts ->
         assert request.expr == "year > {min_year} AND genre IN {genres}"
@@ -30,7 +30,7 @@ defmodule Milvex.ExprParamsIntegrationTest do
     end
 
     test "leaves expr_template_values empty when no expr_params" do
-      stub(Connection, :get_channel, fn _, _ -> {:ok, :channel} end)
+      stub(Connection, :get_channel, fn _, _ -> {:ok, :channel, Milvex.Config.defaults()} end)
 
       expect(RPC, :call, fn :channel, _, :query, request, _opts ->
         assert request.expr_template_values == %{}
@@ -46,7 +46,7 @@ defmodule Milvex.ExprParamsIntegrationTest do
       params = %{"cutoff" => 2000}
       expected_proto = ExprParams.to_proto(params)
 
-      stub(Connection, :get_channel, fn _, _ -> {:ok, :channel} end)
+      stub(Connection, :get_channel, fn _, _ -> {:ok, :channel, Milvex.Config.defaults()} end)
 
       expect(RPC, :call, fn :channel, _, :delete, request, _opts ->
         assert request.expr == "year < {cutoff}"
@@ -58,7 +58,7 @@ defmodule Milvex.ExprParamsIntegrationTest do
     end
 
     test "leaves expr_template_values empty when no expr_params" do
-      stub(Connection, :get_channel, fn _, _ -> {:ok, :channel} end)
+      stub(Connection, :get_channel, fn _, _ -> {:ok, :channel, Milvex.Config.defaults()} end)
 
       expect(RPC, :call, fn :channel, _, :delete, request, _opts ->
         assert request.expr_template_values == %{}

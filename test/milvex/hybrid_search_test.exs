@@ -17,6 +17,7 @@ defmodule Milvex.HybridSearchTest do
   alias Milvex.Milvus.Proto.Schema.FieldSchema
 
   @channel %GRPC.Channel{host: "localhost", port: 19_530}
+  @config Milvex.Config.defaults()
 
   @describe_response {:ok,
                       %DescribeCollectionResponse{
@@ -109,7 +110,7 @@ defmodule Milvex.HybridSearchTest do
       {:ok, ranker} = Ranker.rrf()
       test_pid = self()
 
-      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel, @config} end)
 
       stub(RPC, :call, fn _channel, _stub, method, request, _opts ->
         case method do
@@ -144,7 +145,7 @@ defmodule Milvex.HybridSearchTest do
       {:ok, ranker} = Ranker.weighted([0.7, 0.3])
       test_pid = self()
 
-      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel, @config} end)
 
       stub(RPC, :call, fn _channel, _stub, method, request, _opts ->
         case method do

@@ -114,7 +114,8 @@ defmodule Milvex do
         consistency_level: get_consistency_level(opts)
       }
 
-      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :create_collection, request) do
+      with {:ok, response} <-
+             RPC.call(channel, MilvusService.Stub, :create_collection, request, opts) do
         RPC.check_status(response, "CreateCollection")
       end
     end
@@ -147,7 +148,8 @@ defmodule Milvex do
         collection_name: resolve_collection_name(collection)
       }
 
-      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :drop_collection, request) do
+      with {:ok, response} <-
+             RPC.call(channel, MilvusService.Stub, :drop_collection, request, opts) do
         RPC.check_status(response, "DropCollection")
       end
     end
@@ -181,7 +183,8 @@ defmodule Milvex do
         collection_name: resolve_collection_name(collection)
       }
 
-      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :has_collection, request),
+      with {:ok, response} <-
+             RPC.call(channel, MilvusService.Stub, :has_collection, request, opts),
            {:ok, resp} <- RPC.with_status_check(response, "HasCollection") do
         {:ok, resp.value}
       end
@@ -221,7 +224,8 @@ defmodule Milvex do
         collection_name: resolve_collection_name(collection)
       }
 
-      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :describe_collection, request),
+      with {:ok, response} <-
+             RPC.call(channel, MilvusService.Stub, :describe_collection, request, opts),
            {:ok, resp} <- RPC.with_status_check(response, "DescribeCollection") do
         {:ok,
          %{
@@ -261,7 +265,8 @@ defmodule Milvex do
         db_name: get_db_name(opts)
       }
 
-      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :show_collections, request),
+      with {:ok, response} <-
+             RPC.call(channel, MilvusService.Stub, :show_collections, request, opts),
            {:ok, resp} <- RPC.with_status_check(response, "ShowCollections") do
         {:ok, resp.collection_names}
       end
@@ -297,7 +302,8 @@ defmodule Milvex do
         replica_number: Keyword.get(opts, :replica_number, 1)
       }
 
-      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :load_collection, request) do
+      with {:ok, response} <-
+             RPC.call(channel, MilvusService.Stub, :load_collection, request, opts) do
         RPC.check_status(response, "LoadCollection")
       end
     end
@@ -330,7 +336,8 @@ defmodule Milvex do
         collection_name: resolve_collection_name(collection)
       }
 
-      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :release_collection, request) do
+      with {:ok, response} <-
+             RPC.call(channel, MilvusService.Stub, :release_collection, request, opts) do
         RPC.check_status(response, "ReleaseCollection")
       end
     end
@@ -390,7 +397,7 @@ defmodule Milvex do
         extra_params: Index.to_extra_params(index)
       }
 
-      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :create_index, request) do
+      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :create_index, request, opts) do
         RPC.check_status(response, "CreateIndex")
       end
     end
@@ -408,7 +415,7 @@ defmodule Milvex do
         extra_params: extra_params
       }
 
-      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :create_index, request) do
+      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :create_index, request, opts) do
         RPC.check_status(response, "CreateIndex")
       end
     end
@@ -450,7 +457,7 @@ defmodule Milvex do
         index_name: Keyword.get(opts, :index_name, "")
       }
 
-      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :drop_index, request) do
+      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :drop_index, request, opts) do
         RPC.check_status(response, "DropIndex")
       end
     end
@@ -487,7 +494,8 @@ defmodule Milvex do
         index_name: Keyword.get(opts, :index_name, "")
       }
 
-      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :describe_index, request),
+      with {:ok, response} <-
+             RPC.call(channel, MilvusService.Stub, :describe_index, request, opts),
            {:ok, resp} <- RPC.with_status_check(response, "DescribeIndex") do
         {:ok, resp.index_descriptions}
       end
@@ -573,7 +581,7 @@ defmodule Milvex do
         num_rows: Data.num_rows(prepared_data)
       }
 
-      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :insert, request),
+      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :insert, request, opts),
            {:ok, resp} <- RPC.with_status_check(response, "Insert") do
         {:ok,
          %{
@@ -627,7 +635,7 @@ defmodule Milvex do
         expr_template_values: ExprParams.to_proto(opts[:expr_params])
       }
 
-      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :delete, request),
+      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :delete, request, opts),
            {:ok, resp} <- RPC.with_status_check(response, "Delete") do
         {:ok, %{delete_count: resp.delete_cnt}}
       end
@@ -671,7 +679,7 @@ defmodule Milvex do
         num_rows: Data.num_rows(prepared_data)
       }
 
-      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :upsert, request),
+      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :upsert, request, opts),
            {:ok, resp} <- RPC.with_status_check(response, "Upsert") do
         {:ok,
          %{
@@ -729,7 +737,7 @@ defmodule Milvex do
         expr_template_values: ExprParams.to_proto(opts[:expr_params])
       }
 
-      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :query, request),
+      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :query, request, opts),
            {:ok, resp} <- RPC.with_status_check(response, "Query") do
         {:ok, QueryResult.from_proto(resp)}
       end
@@ -843,7 +851,7 @@ defmodule Milvex do
         highlighter: build_highlighter(Keyword.get(opts, :highlight))
       }
 
-      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :search, request),
+      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :search, request, opts),
            {:ok, resp} <- RPC.with_status_check(response, "Search") do
         {:ok, SearchResult.from_proto(resp)}
       end
@@ -935,7 +943,7 @@ defmodule Milvex do
         function_score: Keyword.get(extra, :function_score)
       }
 
-      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :hybrid_search, request),
+      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :hybrid_search, request, opts),
            {:ok, resp} <- RPC.with_status_check(response, "HybridSearch") do
         {:ok, SearchResult.from_proto(resp)}
       end
@@ -1121,7 +1129,8 @@ defmodule Milvex do
         partition_name: partition_name
       }
 
-      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :create_partition, request) do
+      with {:ok, response} <-
+             RPC.call(channel, MilvusService.Stub, :create_partition, request, opts) do
         RPC.check_status(response, "CreatePartition")
       end
     end
@@ -1160,7 +1169,8 @@ defmodule Milvex do
         partition_name: partition_name
       }
 
-      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :drop_partition, request) do
+      with {:ok, response} <-
+             RPC.call(channel, MilvusService.Stub, :drop_partition, request, opts) do
         RPC.check_status(response, "DropPartition")
       end
     end
@@ -1200,7 +1210,7 @@ defmodule Milvex do
         partition_name: partition_name
       }
 
-      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :has_partition, request),
+      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :has_partition, request, opts),
            {:ok, resp} <- RPC.with_status_check(response, "HasPartition") do
         {:ok, resp.value}
       end
@@ -1238,7 +1248,8 @@ defmodule Milvex do
         collection_name: resolve_collection_name(collection)
       }
 
-      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :show_partitions, request),
+      with {:ok, response} <-
+             RPC.call(channel, MilvusService.Stub, :show_partitions, request, opts),
            {:ok, resp} <- RPC.with_status_check(response, "ShowPartitions") do
         {:ok, resp.partition_names}
       end
@@ -1280,7 +1291,8 @@ defmodule Milvex do
         replica_number: Keyword.get(opts, :replica_number, 1)
       }
 
-      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :load_partitions, request) do
+      with {:ok, response} <-
+             RPC.call(channel, MilvusService.Stub, :load_partitions, request, opts) do
         RPC.check_status(response, "LoadPartitions")
       end
     end
@@ -1319,7 +1331,8 @@ defmodule Milvex do
         partition_names: partition_names
       }
 
-      with {:ok, response} <- RPC.call(channel, MilvusService.Stub, :release_partitions, request) do
+      with {:ok, response} <-
+             RPC.call(channel, MilvusService.Stub, :release_partitions, request, opts) do
         RPC.check_status(response, "ReleasePartitions")
       end
     end

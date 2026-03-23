@@ -216,29 +216,4 @@ defmodule Milvex.RetryTest do
       :telemetry.detach("retry-no-emit-test")
     end
   end
-
-  describe "split_opts/1" do
-    test "separates retry opts from other opts" do
-      opts = [
-        retry_max_attempts: 3,
-        retry_base_delay: 50,
-        timeout: 10_000,
-        some_other: :value
-      ]
-
-      {retry_opts, rest} = Retry.split_opts(opts)
-
-      assert retry_opts == [retry_max_attempts: 3, retry_base_delay: 50]
-      assert rest == [timeout: 10_000, some_other: :value]
-    end
-
-    test "returns empty retry opts when none present" do
-      opts = [timeout: 5_000]
-
-      {retry_opts, rest} = Retry.split_opts(opts)
-
-      assert retry_opts == []
-      assert rest == [timeout: 5_000]
-    end
-  end
 end

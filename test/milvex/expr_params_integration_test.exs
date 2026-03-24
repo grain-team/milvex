@@ -18,7 +18,7 @@ defmodule Milvex.ExprParamsIntegrationTest do
 
       stub(Connection, :get_channel, fn _, _ -> {:ok, :channel, Milvex.Config.defaults()} end)
 
-      expect(RPC, :call, fn :channel, _, :query, request, _opts ->
+      expect(RPC, :call, fn _channel_fn, _, :query, request, _opts ->
         assert request.expr == "year > {min_year} AND genre IN {genres}"
         assert request.expr_template_values == expected_proto
         {:ok, %QueryResults{status: %Status{code: 0}, fields_data: []}}
@@ -32,7 +32,7 @@ defmodule Milvex.ExprParamsIntegrationTest do
     test "leaves expr_template_values empty when no expr_params" do
       stub(Connection, :get_channel, fn _, _ -> {:ok, :channel, Milvex.Config.defaults()} end)
 
-      expect(RPC, :call, fn :channel, _, :query, request, _opts ->
+      expect(RPC, :call, fn _channel_fn, _, :query, request, _opts ->
         assert request.expr_template_values == %{}
         {:ok, %QueryResults{status: %Status{code: 0}, fields_data: []}}
       end)
@@ -48,7 +48,7 @@ defmodule Milvex.ExprParamsIntegrationTest do
 
       stub(Connection, :get_channel, fn _, _ -> {:ok, :channel, Milvex.Config.defaults()} end)
 
-      expect(RPC, :call, fn :channel, _, :delete, request, _opts ->
+      expect(RPC, :call, fn _channel_fn, _, :delete, request, _opts ->
         assert request.expr == "year < {cutoff}"
         assert request.expr_template_values == expected_proto
         {:ok, %MutationResult{status: %Status{code: 0}, delete_cnt: 5}}
@@ -60,7 +60,7 @@ defmodule Milvex.ExprParamsIntegrationTest do
     test "leaves expr_template_values empty when no expr_params" do
       stub(Connection, :get_channel, fn _, _ -> {:ok, :channel, Milvex.Config.defaults()} end)
 
-      expect(RPC, :call, fn :channel, _, :delete, request, _opts ->
+      expect(RPC, :call, fn _channel_fn, _, :delete, request, _opts ->
         assert request.expr_template_values == %{}
         {:ok, %MutationResult{status: %Status{code: 0}, delete_cnt: 0}}
       end)

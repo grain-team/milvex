@@ -105,7 +105,7 @@ defmodule Milvex do
   @spec create_collection(GenServer.server(), String.t(), Schema.t(), keyword()) ::
           :ok | {:error, Error.t()}
   def create_collection(conn, name, %Schema{} = schema, opts \\ []) do
-    with {:ok, channel, config} <- Connection.get_channel(conn, opts),
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts),
          {:ok, schema_bytes} <- encode_schema(schema) do
       request = %CreateCollectionRequest{
         db_name: get_db_name(opts),
@@ -117,11 +117,11 @@ defmodule Milvex do
 
       with {:ok, response} <-
              RPC.call(
-               channel,
+               channel_fn,
                MilvusService.Stub,
                :create_collection,
                request,
-               Config.merge_rpc_opts(config, opts)
+               rpc_opts
              ) do
         RPC.check_status(response, "CreateCollection")
       end
@@ -149,7 +149,7 @@ defmodule Milvex do
   @spec drop_collection(GenServer.server(), collection_ref(), keyword()) ::
           :ok | {:error, Error.t()}
   def drop_collection(conn, collection, opts \\ []) do
-    with {:ok, channel, config} <- Connection.get_channel(conn, opts) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
       request = %DropCollectionRequest{
         db_name: get_db_name(opts),
         collection_name: resolve_collection_name(collection)
@@ -157,11 +157,11 @@ defmodule Milvex do
 
       with {:ok, response} <-
              RPC.call(
-               channel,
+               channel_fn,
                MilvusService.Stub,
                :drop_collection,
                request,
-               Config.merge_rpc_opts(config, opts)
+               rpc_opts
              ) do
         RPC.check_status(response, "DropCollection")
       end
@@ -190,7 +190,7 @@ defmodule Milvex do
   @spec has_collection(GenServer.server(), collection_ref(), keyword()) ::
           {:ok, boolean()} | {:error, Error.t()}
   def has_collection(conn, collection, opts \\ []) do
-    with {:ok, channel, config} <- Connection.get_channel(conn, opts) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
       request = %HasCollectionRequest{
         db_name: get_db_name(opts),
         collection_name: resolve_collection_name(collection)
@@ -198,11 +198,11 @@ defmodule Milvex do
 
       with {:ok, response} <-
              RPC.call(
-               channel,
+               channel_fn,
                MilvusService.Stub,
                :has_collection,
                request,
-               Config.merge_rpc_opts(config, opts)
+               rpc_opts
              ),
            {:ok, resp} <- RPC.with_status_check(response, "HasCollection") do
         {:ok, resp.value}
@@ -237,7 +237,7 @@ defmodule Milvex do
   @spec describe_collection(GenServer.server(), collection_ref(), keyword()) ::
           {:ok, map()} | {:error, Error.t()}
   def describe_collection(conn, collection, opts \\ []) do
-    with {:ok, channel, config} <- Connection.get_channel(conn, opts) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
       request = %DescribeCollectionRequest{
         db_name: get_db_name(opts),
         collection_name: resolve_collection_name(collection)
@@ -245,11 +245,11 @@ defmodule Milvex do
 
       with {:ok, response} <-
              RPC.call(
-               channel,
+               channel_fn,
                MilvusService.Stub,
                :describe_collection,
                request,
-               Config.merge_rpc_opts(config, opts)
+               rpc_opts
              ),
            {:ok, resp} <- RPC.with_status_check(response, "DescribeCollection") do
         {:ok,
@@ -285,18 +285,18 @@ defmodule Milvex do
   @spec list_collections(GenServer.server(), keyword()) ::
           {:ok, [String.t()]} | {:error, Error.t()}
   def list_collections(conn, opts \\ []) do
-    with {:ok, channel, config} <- Connection.get_channel(conn, opts) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
       request = %ShowCollectionsRequest{
         db_name: get_db_name(opts)
       }
 
       with {:ok, response} <-
              RPC.call(
-               channel,
+               channel_fn,
                MilvusService.Stub,
                :show_collections,
                request,
-               Config.merge_rpc_opts(config, opts)
+               rpc_opts
              ),
            {:ok, resp} <- RPC.with_status_check(response, "ShowCollections") do
         {:ok, resp.collection_names}
@@ -326,7 +326,7 @@ defmodule Milvex do
   @spec load_collection(GenServer.server(), collection_ref(), keyword()) ::
           :ok | {:error, Error.t()}
   def load_collection(conn, collection, opts \\ []) do
-    with {:ok, channel, config} <- Connection.get_channel(conn, opts) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
       request = %LoadCollectionRequest{
         db_name: get_db_name(opts),
         collection_name: resolve_collection_name(collection),
@@ -335,11 +335,11 @@ defmodule Milvex do
 
       with {:ok, response} <-
              RPC.call(
-               channel,
+               channel_fn,
                MilvusService.Stub,
                :load_collection,
                request,
-               Config.merge_rpc_opts(config, opts)
+               rpc_opts
              ) do
         RPC.check_status(response, "LoadCollection")
       end
@@ -367,7 +367,7 @@ defmodule Milvex do
   @spec release_collection(GenServer.server(), collection_ref(), keyword()) ::
           :ok | {:error, Error.t()}
   def release_collection(conn, collection, opts \\ []) do
-    with {:ok, channel, config} <- Connection.get_channel(conn, opts) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
       request = %ReleaseCollectionRequest{
         db_name: get_db_name(opts),
         collection_name: resolve_collection_name(collection)
@@ -375,11 +375,11 @@ defmodule Milvex do
 
       with {:ok, response} <-
              RPC.call(
-               channel,
+               channel_fn,
                MilvusService.Stub,
                :release_collection,
                request,
-               Config.merge_rpc_opts(config, opts)
+               rpc_opts
              ) do
         RPC.check_status(response, "ReleaseCollection")
       end
@@ -431,7 +431,7 @@ defmodule Milvex do
 
   def create_index(conn, collection, %Index{} = index, opts) do
     with {:ok, _} <- Index.validate(index),
-         {:ok, channel, config} <- Connection.get_channel(conn, opts) do
+         {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
       request = %CreateIndexRequest{
         db_name: get_db_name(opts),
         collection_name: resolve_collection_name(collection),
@@ -442,11 +442,11 @@ defmodule Milvex do
 
       with {:ok, response} <-
              RPC.call(
-               channel,
+               channel_fn,
                MilvusService.Stub,
                :create_index,
                request,
-               Config.merge_rpc_opts(config, opts)
+               rpc_opts
              ) do
         RPC.check_status(response, "CreateIndex")
       end
@@ -454,7 +454,7 @@ defmodule Milvex do
   end
 
   def create_index(conn, collection, field_name, opts) when is_binary(field_name) do
-    with {:ok, channel, config} <- Connection.get_channel(conn, opts) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
       extra_params = build_index_params(opts)
 
       request = %CreateIndexRequest{
@@ -467,11 +467,11 @@ defmodule Milvex do
 
       with {:ok, response} <-
              RPC.call(
-               channel,
+               channel_fn,
                MilvusService.Stub,
                :create_index,
                request,
-               Config.merge_rpc_opts(config, opts)
+               rpc_opts
              ) do
         RPC.check_status(response, "CreateIndex")
       end
@@ -506,7 +506,7 @@ defmodule Milvex do
   @spec drop_index(GenServer.server(), collection_ref(), String.t(), keyword()) ::
           :ok | {:error, Error.t()}
   def drop_index(conn, collection, field_name, opts \\ []) do
-    with {:ok, channel, config} <- Connection.get_channel(conn, opts) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
       request = %DropIndexRequest{
         db_name: get_db_name(opts),
         collection_name: resolve_collection_name(collection),
@@ -516,11 +516,11 @@ defmodule Milvex do
 
       with {:ok, response} <-
              RPC.call(
-               channel,
+               channel_fn,
                MilvusService.Stub,
                :drop_index,
                request,
-               Config.merge_rpc_opts(config, opts)
+               rpc_opts
              ) do
         RPC.check_status(response, "DropIndex")
       end
@@ -550,7 +550,7 @@ defmodule Milvex do
   @spec describe_index(GenServer.server(), collection_ref(), keyword()) ::
           {:ok, list()} | {:error, Error.t()}
   def describe_index(conn, collection, opts \\ []) do
-    with {:ok, channel, config} <- Connection.get_channel(conn, opts) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
       request = %DescribeIndexRequest{
         db_name: get_db_name(opts),
         collection_name: resolve_collection_name(collection),
@@ -560,11 +560,11 @@ defmodule Milvex do
 
       with {:ok, response} <-
              RPC.call(
-               channel,
+               channel_fn,
                MilvusService.Stub,
                :describe_index,
                request,
-               Config.merge_rpc_opts(config, opts)
+               rpc_opts
              ),
            {:ok, resp} <- RPC.with_status_check(response, "DescribeIndex") do
         {:ok, resp.index_descriptions}
@@ -641,7 +641,7 @@ defmodule Milvex do
   def insert(conn, collection, data, opts \\ []) do
     collection_name = resolve_collection_name(collection)
 
-    with {:ok, channel, config} <- Connection.get_channel(conn, opts),
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts),
          {:ok, prepared_data} <- ensure_data(data, collection_name, conn) do
       request = %InsertRequest{
         db_name: get_db_name(opts),
@@ -653,11 +653,11 @@ defmodule Milvex do
 
       with {:ok, response} <-
              RPC.call(
-               channel,
+               channel_fn,
                MilvusService.Stub,
                :insert,
                request,
-               Config.merge_rpc_opts(config, opts)
+               rpc_opts
              ),
            {:ok, resp} <- RPC.with_status_check(response, "Insert") do
         {:ok,
@@ -702,7 +702,7 @@ defmodule Milvex do
   @spec delete(GenServer.server(), collection_ref(), String.t(), keyword()) ::
           {:ok, %{delete_count: integer()}} | {:error, Error.t()}
   def delete(conn, collection, expr, opts \\ []) do
-    with {:ok, channel, config} <- Connection.get_channel(conn, opts) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
       request = %DeleteRequest{
         db_name: get_db_name(opts),
         collection_name: resolve_collection_name(collection),
@@ -714,11 +714,11 @@ defmodule Milvex do
 
       with {:ok, response} <-
              RPC.call(
-               channel,
+               channel_fn,
                MilvusService.Stub,
                :delete,
                request,
-               Config.merge_rpc_opts(config, opts)
+               rpc_opts
              ),
            {:ok, resp} <- RPC.with_status_check(response, "Delete") do
         {:ok, %{delete_count: resp.delete_cnt}}
@@ -753,7 +753,7 @@ defmodule Milvex do
   def upsert(conn, collection, data, opts \\ []) do
     collection_name = resolve_collection_name(collection)
 
-    with {:ok, channel, config} <- Connection.get_channel(conn, opts),
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts),
          {:ok, prepared_data} <- ensure_data(data, collection_name, conn) do
       request = %UpsertRequest{
         db_name: get_db_name(opts),
@@ -765,11 +765,11 @@ defmodule Milvex do
 
       with {:ok, response} <-
              RPC.call(
-               channel,
+               channel_fn,
                MilvusService.Stub,
                :upsert,
                request,
-               Config.merge_rpc_opts(config, opts)
+               rpc_opts
              ),
            {:ok, resp} <- RPC.with_status_check(response, "Upsert") do
         {:ok,
@@ -816,7 +816,7 @@ defmodule Milvex do
   @spec query(GenServer.server(), collection_ref(), String.t(), keyword()) ::
           {:ok, QueryResult.t()} | {:error, Error.t()}
   def query(conn, collection, expr, opts \\ []) do
-    with {:ok, channel, config} <- Connection.get_channel(conn, opts) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
       request = %QueryRequest{
         db_name: get_db_name(opts),
         collection_name: resolve_collection_name(collection),
@@ -830,11 +830,11 @@ defmodule Milvex do
 
       with {:ok, response} <-
              RPC.call(
-               channel,
+               channel_fn,
                MilvusService.Stub,
                :query,
                request,
-               Config.merge_rpc_opts(config, opts)
+               rpc_opts
              ),
            {:ok, resp} <- RPC.with_status_check(response, "Query") do
         {:ok, QueryResult.from_proto(resp)}
@@ -930,7 +930,7 @@ defmodule Milvex do
     collection_name = resolve_collection_name(collection)
 
     with {:ok, vector_field} <- require_option(opts, :vector_field),
-         {:ok, channel, config} <- Connection.get_channel(conn, opts),
+         {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts),
          {:ok, schema} <- resolve_schema(conn, collection, collection_name, opts),
          {:ok, field, is_nested} <- find_vector_field(schema, vector_field),
          {:ok, placeholder_bytes} <- build_ann_placeholder_group(vectors, field, is_nested) do
@@ -951,11 +951,11 @@ defmodule Milvex do
 
       with {:ok, response} <-
              RPC.call(
-               channel,
+               channel_fn,
                MilvusService.Stub,
                :search,
                request,
-               Config.merge_rpc_opts(config, opts)
+               rpc_opts
              ),
            {:ok, resp} <- RPC.with_status_check(response, "Search") do
         {:ok, SearchResult.from_proto(resp)}
@@ -1034,7 +1034,7 @@ defmodule Milvex do
   defp do_hybrid_search(conn, collection, searches, ranker, opts, extra \\ []) do
     collection_name = resolve_collection_name(collection)
 
-    with {:ok, channel, config} <- Connection.get_channel(conn, opts),
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts),
          {:ok, schema} <- resolve_schema(conn, collection, collection_name, opts),
          {:ok, search_requests} <- build_search_requests(searches, schema) do
       request = %HybridSearchRequest{
@@ -1050,11 +1050,11 @@ defmodule Milvex do
 
       with {:ok, response} <-
              RPC.call(
-               channel,
+               channel_fn,
                MilvusService.Stub,
                :hybrid_search,
                request,
-               Config.merge_rpc_opts(config, opts)
+               rpc_opts
              ),
            {:ok, resp} <- RPC.with_status_check(response, "HybridSearch") do
         {:ok, SearchResult.from_proto(resp)}
@@ -1234,7 +1234,7 @@ defmodule Milvex do
   @spec create_partition(GenServer.server(), collection_ref(), String.t(), keyword()) ::
           :ok | {:error, Error.t()}
   def create_partition(conn, collection, partition_name, opts \\ []) do
-    with {:ok, channel, config} <- Connection.get_channel(conn, opts) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
       request = %CreatePartitionRequest{
         db_name: get_db_name(opts),
         collection_name: resolve_collection_name(collection),
@@ -1243,11 +1243,11 @@ defmodule Milvex do
 
       with {:ok, response} <-
              RPC.call(
-               channel,
+               channel_fn,
                MilvusService.Stub,
                :create_partition,
                request,
-               Config.merge_rpc_opts(config, opts)
+               rpc_opts
              ) do
         RPC.check_status(response, "CreatePartition")
       end
@@ -1280,7 +1280,7 @@ defmodule Milvex do
   @spec drop_partition(GenServer.server(), collection_ref(), String.t(), keyword()) ::
           :ok | {:error, Error.t()}
   def drop_partition(conn, collection, partition_name, opts \\ []) do
-    with {:ok, channel, config} <- Connection.get_channel(conn, opts) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
       request = %DropPartitionRequest{
         db_name: get_db_name(opts),
         collection_name: resolve_collection_name(collection),
@@ -1289,11 +1289,11 @@ defmodule Milvex do
 
       with {:ok, response} <-
              RPC.call(
-               channel,
+               channel_fn,
                MilvusService.Stub,
                :drop_partition,
                request,
-               Config.merge_rpc_opts(config, opts)
+               rpc_opts
              ) do
         RPC.check_status(response, "DropPartition")
       end
@@ -1327,7 +1327,7 @@ defmodule Milvex do
   @spec has_partition(GenServer.server(), collection_ref(), String.t(), keyword()) ::
           {:ok, boolean()} | {:error, Error.t()}
   def has_partition(conn, collection, partition_name, opts \\ []) do
-    with {:ok, channel, config} <- Connection.get_channel(conn, opts) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
       request = %HasPartitionRequest{
         db_name: get_db_name(opts),
         collection_name: resolve_collection_name(collection),
@@ -1336,11 +1336,11 @@ defmodule Milvex do
 
       with {:ok, response} <-
              RPC.call(
-               channel,
+               channel_fn,
                MilvusService.Stub,
                :has_partition,
                request,
-               Config.merge_rpc_opts(config, opts)
+               rpc_opts
              ),
            {:ok, resp} <- RPC.with_status_check(response, "HasPartition") do
         {:ok, resp.value}
@@ -1373,7 +1373,7 @@ defmodule Milvex do
   @spec list_partitions(GenServer.server(), collection_ref(), keyword()) ::
           {:ok, [String.t()]} | {:error, Error.t()}
   def list_partitions(conn, collection, opts \\ []) do
-    with {:ok, channel, config} <- Connection.get_channel(conn, opts) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
       request = %ShowPartitionsRequest{
         db_name: get_db_name(opts),
         collection_name: resolve_collection_name(collection)
@@ -1381,11 +1381,11 @@ defmodule Milvex do
 
       with {:ok, response} <-
              RPC.call(
-               channel,
+               channel_fn,
                MilvusService.Stub,
                :show_partitions,
                request,
-               Config.merge_rpc_opts(config, opts)
+               rpc_opts
              ),
            {:ok, resp} <- RPC.with_status_check(response, "ShowPartitions") do
         {:ok, resp.partition_names}
@@ -1420,7 +1420,7 @@ defmodule Milvex do
   @spec load_partitions(GenServer.server(), collection_ref(), [String.t()], keyword()) ::
           :ok | {:error, Error.t()}
   def load_partitions(conn, collection, partition_names, opts \\ []) do
-    with {:ok, channel, config} <- Connection.get_channel(conn, opts) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
       request = %LoadPartitionsRequest{
         db_name: get_db_name(opts),
         collection_name: resolve_collection_name(collection),
@@ -1430,11 +1430,11 @@ defmodule Milvex do
 
       with {:ok, response} <-
              RPC.call(
-               channel,
+               channel_fn,
                MilvusService.Stub,
                :load_partitions,
                request,
-               Config.merge_rpc_opts(config, opts)
+               rpc_opts
              ) do
         RPC.check_status(response, "LoadPartitions")
       end
@@ -1467,7 +1467,7 @@ defmodule Milvex do
   @spec release_partitions(GenServer.server(), collection_ref(), [String.t()], keyword()) ::
           :ok | {:error, Error.t()}
   def release_partitions(conn, collection, partition_names, opts \\ []) do
-    with {:ok, channel, config} <- Connection.get_channel(conn, opts) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
       request = %ReleasePartitionsRequest{
         db_name: get_db_name(opts),
         collection_name: resolve_collection_name(collection),
@@ -1476,11 +1476,11 @@ defmodule Milvex do
 
       with {:ok, response} <-
              RPC.call(
-               channel,
+               channel_fn,
                MilvusService.Stub,
                :release_partitions,
                request,
-               Config.merge_rpc_opts(config, opts)
+               rpc_opts
              ) do
         RPC.check_status(response, "ReleasePartitions")
       end
@@ -1490,6 +1490,17 @@ defmodule Milvex do
   # ============================================================================
   # Private Helpers
   # ============================================================================
+
+  defp resolve_channel(conn, opts) do
+    case Connection.get_channel(conn, opts) do
+      {:ok, _channel, config} ->
+        channel_fn = fn -> Connection.get_channel(conn, opts) end
+        {:ok, channel_fn, Config.merge_rpc_opts(config, opts)}
+
+      {:error, _} = error ->
+        error
+    end
+  end
 
   defp resolve_collection_name(name) when is_binary(name), do: name
 

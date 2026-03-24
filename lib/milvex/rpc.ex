@@ -35,9 +35,12 @@ defmodule Milvex.RPC do
   @doc """
   Call a gRPC method with automatic error conversion.
 
+  The channel function is called on each retry attempt to obtain a fresh
+  channel, allowing recovery from dead connections.
+
   ## Parameters
 
-  - `channel` - The GRPC.Channel to use
+  - `channel_fn` - `(-> {:ok, GRPC.Channel.t(), Config.t()} | {:error, term()})`
   - `stub_module` - The generated gRPC stub module (e.g., `MilvusService.Stub`)
   - `method` - The RPC method name as an atom (e.g., `:show_collections`)
   - `request` - The request struct
@@ -50,21 +53,36 @@ defmodule Milvex.RPC do
 
   ## Examples
 
-      RPC.call(channel, MilvusService.Stub, :show_collections, request)
-      RPC.call(channel, MilvusService.Stub, :create_collection, request, timeout: 30_000)
+      RPC.call(
+        fn -> Connection.get_channel(conn) end,
+        MilvusService.Stub,
+        :search,
+        request,
+        timeout: 30_000
+      )
   """
   @retry_keys [:retry_max_attempts, :retry_base_delay, :retry_max_delay, :retry_timeout]
   @grpc_keys [:timeout, :metadata, :content_type, :compressor]
 
-  @spec call(GRPC.Channel.t(), module(), atom(), struct(), keyword()) :: rpc_result()
-  def call(channel, stub_module, method, request, opts \\ []) do
+  @spec call(
+          (-> {:ok, GRPC.Channel.t(), map()} | {:error, term()}),
+          module(),
+          atom(),
+          struct(),
+          keyword()
+        ) :: rpc_result()
+  def call(channel_fn, stub_module, method, request, opts \\ [])
+      when is_function(channel_fn, 0) do
     retry_opts = Keyword.take(opts, @retry_keys)
     grpc_opts = Keyword.take(opts, @grpc_keys)
-
     telemetry_metadata = Telemetry.rpc_metadata(method, stub_module, request)
 
     Retry.with_retry(
-      fn -> do_call(channel, stub_module, method, request, grpc_opts, telemetry_metadata) end,
+      fn ->
+        with {:ok, channel, _config} <- channel_fn.() do
+          do_call(channel, stub_module, method, request, grpc_opts, telemetry_metadata)
+        end
+      end,
       retry_opts,
       telemetry_metadata
     )

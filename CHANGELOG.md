@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/grain-team/milvex/compare/v0.10.0...v0.10.1) (2026-03-25)
+
+
+### Bug Fixes
+
+* Fix retries for errors that kill-connections ([eb37f28](https://github.com/grain-team/milvex/commit/eb37f28060d5cc252f509674c2443be48cb36a18))
+
 ## [0.10.0](https://github.com/grain-team/milvex/compare/v0.9.2...v0.10.0) (2026-03-23)
 
 

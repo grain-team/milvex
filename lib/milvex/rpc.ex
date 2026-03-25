@@ -101,7 +101,7 @@ defmodule Milvex.RPC do
 
         {:error, reason} ->
           result = {:error, connection_error(reason)}
-          {result, Map.put(metadata, :status_code, nil)}
+          {result, Map.put(metadata, :status_code, GRPC.Status.unavailable())}
       end
     end)
   end
@@ -253,13 +253,14 @@ defmodule Milvex.RPC do
     )
   end
 
-  defp retriable_error?(:timeout), do: true
-  defp retriable_error?(:closed), do: true
-  defp retriable_error?(:econnrefused), do: true
-  defp retriable_error?(:econnreset), do: true
-  defp retriable_error?(:ehostunreach), do: true
-  defp retriable_error?(:enetunreach), do: true
-  defp retriable_error?(_), do: false
+  @retriable_reasons [:timeout, :closed, :econnrefused, :econnreset, :ehostunreach, :enetunreach]
+
+  @doc false
+  @spec retriable_error?(term()) :: boolean()
+  def retriable_error?(reason) when reason in @retriable_reasons, do: true
+  def retriable_error?(%{reason: reason}) when reason in @retriable_reasons, do: true
+  def retriable_error?("the connection is closed"), do: true
+  def retriable_error?(_), do: false
 
   defp build_message(reason, detail) when is_binary(reason) and reason != "" do
     if is_binary(detail) and detail != "" do

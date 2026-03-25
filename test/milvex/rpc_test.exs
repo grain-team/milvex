@@ -97,6 +97,34 @@ defmodule Milvex.RPCTest do
     end
   end
 
+  describe "retriable_error?/1" do
+    test "retriable atom reasons" do
+      for reason <- [:timeout, :closed, :econnrefused, :econnreset, :ehostunreach, :enetunreach] do
+        assert RPC.retriable_error?(reason), "expected #{reason} to be retriable"
+      end
+    end
+
+    test "Mint TransportError with retriable reason" do
+      assert RPC.retriable_error?(%Mint.TransportError{reason: :closed})
+    end
+
+    test "Mint HTTPError with retriable reason" do
+      assert RPC.retriable_error?(%Mint.HTTPError{reason: :timeout, module: Mint.HTTP2})
+    end
+
+    test "Mint connection closed string" do
+      assert RPC.retriable_error?("the connection is closed")
+    end
+
+    test "unknown atom is not retriable" do
+      refute RPC.retriable_error?(:some_unknown_error)
+    end
+
+    test "Mint error with non-retriable reason" do
+      refute RPC.retriable_error?(%Mint.TransportError{reason: :protocol_not_negotiated})
+    end
+  end
+
   describe "check_response_status/2" do
     test "returns :ok when status code is 0" do
       response = %{status: %Status{code: 0}, data: "test"}

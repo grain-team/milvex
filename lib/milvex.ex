@@ -1494,12 +1494,38 @@ defmodule Milvex do
   defp resolve_channel(conn, opts) do
     case Connection.get_channel(conn, opts) do
       {:ok, _channel, config} ->
-        channel_fn = fn -> Connection.get_channel(conn, opts) end
+        channel_fn = fn -> fetch_healthy_channel(conn, config, opts) end
         {:ok, channel_fn, Config.merge_rpc_opts(config, opts)}
 
       {:error, _} = error ->
         error
     end
+  end
+
+  defp fetch_healthy_channel(conn, config, opts) do
+    with {:ok, channel, _config} = result <- Connection.get_channel(conn, opts) do
+      if conn_pid_alive?(channel) do
+        result
+      else
+        Connection.notify_disconnected(conn, channel)
+        {:error, connection_closed_error(config)}
+      end
+    end
+  end
+
+  defp conn_pid_alive?(%{adapter_payload: %{conn_pid: pid}}) when is_pid(pid) do
+    Process.alive?(pid)
+  end
+
+  defp conn_pid_alive?(_), do: true
+
+  defp connection_closed_error(config) do
+    Milvex.Errors.Connection.exception(
+      reason: :not_connected,
+      host: config.host,
+      port: config.port,
+      retriable: true
+    )
   end
 
   defp resolve_collection_name(name) when is_binary(name), do: name

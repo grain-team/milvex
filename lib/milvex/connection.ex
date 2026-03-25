@@ -106,6 +106,19 @@ defmodule Milvex.Connection do
   end
 
   @doc """
+  Signals the connection that the channel has been found unusable.
+
+  This is a best-effort cast. In `:connected` state, the connection
+  verifies the reported channel matches the current one before
+  triggering reconnection (stale notifications are safely ignored).
+  In other states the message is a no-op.
+  """
+  @spec notify_disconnected(GenServer.server(), GRPC.Channel.t()) :: :ok
+  def notify_disconnected(conn, channel) do
+    GenStateMachine.cast(conn, {:notify_disconnected, channel})
+  end
+
+  @doc """
   Checks if the connection is currently established.
   """
   @spec connected?(GenServer.server(), keyword()) :: boolean()
@@ -187,6 +200,8 @@ defmodule Milvex.Connection do
     {:keep_state_and_data, [{:reply, from, false}]}
   end
 
+  def connecting(:cast, {:notify_disconnected, _channel}, _data), do: :keep_state_and_data
+
   def connecting(:info, _msg, _data) do
     :keep_state_and_data
   end
@@ -198,11 +213,23 @@ defmodule Milvex.Connection do
   end
 
   def connected({:call, from}, :get_channel, data) do
-    {:keep_state_and_data, [{:reply, from, {:ok, data.channel, data.config}}]}
+    if conn_pid_alive?(data.channel) do
+      {:keep_state_and_data, [{:reply, from, {:ok, data.channel, data.config}}]}
+    else
+      initiate_reconnection(data, [{:reply, from, not_connected_error(data)}])
+    end
   end
 
   def connected({:call, from}, :connected?, _data) do
     {:keep_state_and_data, [{:reply, from, true}]}
+  end
+
+  def connected(:cast, {:notify_disconnected, channel}, data) do
+    if same_conn_pid?(channel, data.channel) do
+      initiate_reconnection(data, [])
+    else
+      :keep_state_and_data
+    end
   end
 
   def connected(:info, {:DOWN, ref, :process, _pid, reason}, %{conn_monitor_ref: ref} = data) do
@@ -245,6 +272,8 @@ defmodule Milvex.Connection do
   def reconnecting({:call, from}, :connected?, _data) do
     {:keep_state_and_data, [{:reply, from, false}]}
   end
+
+  def reconnecting(:cast, {:notify_disconnected, _channel}, _data), do: :keep_state_and_data
 
   def reconnecting(:info, _msg, _data) do
     :keep_state_and_data
@@ -293,6 +322,30 @@ defmodule Milvex.Connection do
       data.config.reconnect_jitter
     )
   end
+
+  defp initiate_reconnection(data, actions) do
+    Telemetry.connection_disconnect(data.config.host, data.config.port, :connection_closed)
+    demonitor_connection(data.conn_monitor_ref)
+    close_channel(data.channel)
+
+    {:next_state, :reconnecting, %{data | channel: nil, conn_monitor_ref: nil, retry_count: 0},
+     actions}
+  end
+
+  defp conn_pid_alive?(%{adapter_payload: %{conn_pid: pid}}) when is_pid(pid) do
+    Process.alive?(pid)
+  end
+
+  defp conn_pid_alive?(_), do: true
+
+  defp same_conn_pid?(
+         %{adapter_payload: %{conn_pid: pid}},
+         %{adapter_payload: %{conn_pid: pid}}
+       )
+       when is_pid(pid),
+       do: true
+
+  defp same_conn_pid?(_, _), do: false
 
   defp not_connected_error(data) do
     {:error,
@@ -385,6 +438,14 @@ defmodule Milvex.Connection do
   defp maybe_add_adapter_opts(opts, %{adapter: GRPC.Client.Adapters.Gun} = config) do
     adapter_opts = Map.get(config, :adapter_opts, [])
     adapter_opts = Keyword.put_new(adapter_opts, :retry, 0)
+    Keyword.put(opts, :adapter_opts, adapter_opts)
+  end
+
+  defp maybe_add_adapter_opts(opts, %{adapter: GRPC.Client.Adapters.Mint} = config) do
+    adapter_opts = Map.get(config, :adapter_opts, [])
+    transport_opts = Keyword.get(adapter_opts, :transport_opts, [])
+    transport_opts = Keyword.put_new(transport_opts, :keepalive, true)
+    adapter_opts = Keyword.put(adapter_opts, :transport_opts, transport_opts)
     Keyword.put(opts, :adapter_opts, adapter_opts)
   end
 

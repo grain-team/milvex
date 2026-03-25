@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.2](https://github.com/grain-team/milvex/compare/v0.10.1...v0.10.2) (2026-03-25)
+
+
+### Bug Fixes
+
+* Mint adapter has slightly different errors ([3acebf1](https://github.com/grain-team/milvex/commit/3acebf188c7044d8de211befd7d9ddc8b496e82e))
+
 ## [0.10.1](https://github.com/grain-team/milvex/compare/v0.10.0...v0.10.1) (2026-03-25)
 
 

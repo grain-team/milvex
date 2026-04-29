@@ -456,6 +456,97 @@ defmodule MilvexClientTest do
       assert {:ok, result} = Milvex.upsert(:conn, "test", data)
       assert result.upsert_count == 1
     end
+
+    test "defaults partial_update to false on the proto request", %{schema: schema} do
+      {:ok, data} =
+        Data.from_rows(
+          [%{id: 1, title: "Full row", embedding: [0.1, 0.2, 0.3, 0.4]}],
+          schema
+        )
+
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel, @config} end)
+
+      stub(RPC, :call, fn _channel, _stub, :upsert, request, _opts ->
+        assert request.partial_update == false
+
+        {:ok,
+         %MutationResult{
+           status: %Status{code: 0},
+           IDs: %IDs{id_field: {:int_id, %LongArray{data: [1]}}},
+           upsert_cnt: 1
+         }}
+      end)
+
+      assert {:ok, _} = Milvex.upsert(:conn, "test", data)
+    end
+
+    test "sets partial_update on the proto request when option enabled", %{schema: schema} do
+      {:ok, data} =
+        Data.from_rows([%{id: 1, title: "patched"}], schema, partial_update: true)
+
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel, @config} end)
+
+      stub(RPC, :call, fn _channel, _stub, :upsert, request, _opts ->
+        assert request.partial_update == true
+        field_names = Enum.map(request.fields_data, & &1.field_name) |> Enum.sort()
+        assert field_names == ["id", "title"]
+
+        {:ok,
+         %MutationResult{
+           status: %Status{code: 0},
+           IDs: %IDs{id_field: {:int_id, %LongArray{data: [1]}}},
+           upsert_cnt: 1
+         }}
+      end)
+
+      assert {:ok, %{upsert_count: 1}} =
+               Milvex.upsert(:conn, "test", data, partial_update: true)
+    end
+
+    test "partial_update relaxes validation for raw row maps" do
+      describe_response = %DescribeCollectionResponse{
+        status: %Status{code: 0},
+        schema: %CollectionSchema{
+          name: "test",
+          fields: [
+            %FieldSchema{name: "id", data_type: :Int64, is_primary_key: true},
+            %FieldSchema{
+              name: "title",
+              data_type: :VarChar,
+              type_params: [%KeyValuePair{key: "max_length", value: "256"}]
+            },
+            %FieldSchema{
+              name: "embedding",
+              data_type: :FloatVector,
+              type_params: [%KeyValuePair{key: "dim", value: "4"}]
+            }
+          ]
+        },
+        collectionID: 1
+      }
+
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel, @config} end)
+
+      stub(RPC, :call, fn _channel, _stub, method, _request, _opts ->
+        case method do
+          :describe_collection ->
+            {:ok, describe_response}
+
+          :upsert ->
+            {:ok,
+             %MutationResult{
+               status: %Status{code: 0},
+               IDs: %IDs{id_field: {:int_id, %LongArray{data: [1]}}},
+               upsert_cnt: 1
+             }}
+        end
+      end)
+
+      rows = [%{id: 1, title: "patched"}]
+
+      assert {:ok, %{upsert_count: 1}} =
+               Milvex.upsert(:conn, "test", rows, partial_update: true)
+    end
   end
 
   describe "query/4" do

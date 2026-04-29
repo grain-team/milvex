@@ -742,6 +742,11 @@ defmodule Milvex do
 
     - `:db_name` - Database name (default: "")
     - `:partition_name` - Partition to upsert into (default: "")
+    - `:partial_update` - When `true`, only the fields present in each row
+      are updated and omitted fields keep their existing values. The primary
+      key must be present in every row, and all rows must share the same
+      key set. When `false` (default), omitted fields are overwritten to
+      `null`, matching the original Milvus upsert semantics.
 
   ## Returns
 
@@ -752,15 +757,18 @@ defmodule Milvex do
           {:ok, %{upsert_count: integer(), ids: list()}} | {:error, Error.t()}
   def upsert(conn, collection, data, opts \\ []) do
     collection_name = resolve_collection_name(collection)
+    partial_update = Keyword.get(opts, :partial_update, false)
 
     with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts),
-         {:ok, prepared_data} <- ensure_data(data, collection_name, conn) do
+         {:ok, prepared_data} <-
+           ensure_data(data, collection_name, conn, partial_update: partial_update) do
       request = %UpsertRequest{
         db_name: get_db_name(opts),
         collection_name: collection_name,
         partition_name: Keyword.get(opts, :partition_name, ""),
         fields_data: Data.to_proto(prepared_data),
-        num_rows: Data.num_rows(prepared_data)
+        num_rows: Data.num_rows(prepared_data),
+        partial_update: partial_update
       }
 
       with {:ok, response} <-
@@ -1537,18 +1545,20 @@ defmodule Milvex do
     e -> {:error, Invalid.exception(field: :schema, message: "Failed to encode: #{inspect(e)}")}
   end
 
-  defp ensure_data(%Data{} = data, _collection, _conn), do: {:ok, data}
+  defp ensure_data(data, collection, conn, opts \\ [])
 
-  defp ensure_data(rows, collection, conn) when is_list(rows) do
+  defp ensure_data(%Data{} = data, _collection, _conn, _opts), do: {:ok, data}
+
+  defp ensure_data(rows, collection, conn, opts) when is_list(rows) do
     case detect_row_type(rows) do
       {:collection_struct, module} ->
         schema = Milvex.Collection.to_schema(module)
         maps = Enum.map(rows, &struct_to_map/1)
-        Data.from_rows(maps, schema)
+        Data.from_rows(maps, schema, opts)
 
       :map ->
         with {:ok, info} <- describe_collection(conn, collection) do
-          Data.from_rows(rows, info.schema)
+          Data.from_rows(rows, info.schema, opts)
         end
     end
   end

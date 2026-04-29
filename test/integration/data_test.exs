@@ -251,7 +251,63 @@ defmodule Milvex.Integration.DataTest do
       assert {:error, error} = Milvex.upsert(conn, name, data)
       assert %Milvex.Errors.Grpc{} = error
     end
+
+    test "partial_update keeps untouched fields intact", %{conn: conn} do
+      name = unique_collection_name("upsert_partial")
+      schema = manual_id_schema(name)
+
+      on_exit(fn -> cleanup_collection(conn, name) end)
+
+      :ok = Milvex.create_collection(conn, name, schema)
+
+      :ok =
+        Milvex.create_index(conn, name, "embedding",
+          index_type: "AUTOINDEX",
+          metric_type: "COSINE"
+        )
+
+      original_embedding = random_vector(4)
+
+      initial_rows = [
+        %{id: 1, title: "Original Title", embedding: original_embedding}
+      ]
+
+      {:ok, _} = Milvex.insert(conn, name, Data.from_rows!(initial_rows, schema))
+
+      :ok = Milvex.load_collection(conn, name)
+
+      patched_rows = [%{id: 1, title: "Patched Title"}]
+
+      assert {:ok, %{upsert_count: 1}} =
+               Milvex.upsert(conn, name, patched_rows, partial_update: true)
+
+      assert_eventually(
+        match?(
+          {:ok, %{rows: [%{"title" => "Patched Title"}]}},
+          Milvex.query(conn, name, "id == 1",
+            output_fields: ["id", "title", "embedding"],
+            limit: 1
+          )
+        )
+      )
+
+      {:ok, %{rows: [row]}} =
+        Milvex.query(conn, name, "id == 1",
+          output_fields: ["id", "title", "embedding"],
+          limit: 1
+        )
+
+      assert row["title"] == "Patched Title"
+      assert vectors_close?(row["embedding"], original_embedding)
+    end
   end
+
+  defp vectors_close?(a, b) when length(a) == length(b) do
+    Enum.zip(a, b)
+    |> Enum.all?(fn {x, y} -> abs(x - y) < 1.0e-5 end)
+  end
+
+  defp vectors_close?(_, _), do: false
 
   describe "insert with dynamic fields" do
     test "inserts rows with dynamic fields", %{conn: conn} do

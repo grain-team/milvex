@@ -55,15 +55,27 @@ defmodule Milvex.Data do
   ## Parameters
     - `rows` - List of maps representing rows
     - `schema` - The Schema for type information
+    - `opts` - Options
+
+  ## Options
+    - `:partial_update` - When `true`, relaxes validation so that only
+      primary-key fields are required and the resulting Data only carries
+      the columns that were actually provided in the rows. Use this for
+      `Milvex.upsert/4` partial updates. Default: `false`.
 
   ## Returns
     - `{:ok, data}` on success
     - `{:error, error}` on validation failure
   """
-  @spec from_rows(list(map()), Schema.t()) :: {:ok, t()} | {:error, Milvex.Error.t()}
-  def from_rows(rows, %Schema{} = schema) when is_list(rows) do
-    with :ok <- validate_rows(rows, schema) do
-      columns = transpose_rows_to_columns(rows, schema)
+  @spec from_rows(list(map()), Schema.t(), keyword()) ::
+          {:ok, t()} | {:error, Milvex.Error.t()}
+  def from_rows(rows, schema, opts \\ [])
+
+  def from_rows(rows, %Schema{} = schema, opts) when is_list(rows) do
+    partial_update = Keyword.get(opts, :partial_update, false)
+
+    with :ok <- validate_rows(rows, schema, partial_update) do
+      columns = transpose_rows_to_columns(rows, schema, partial_update)
       num_rows = length(rows)
 
       {:ok, %__MODULE__{fields: columns, schema: schema, num_rows: num_rows}}
@@ -73,9 +85,9 @@ defmodule Milvex.Data do
   @doc """
   Creates Data from a list of row maps. Raises on error.
   """
-  @spec from_rows!(list(map()), Schema.t()) :: t()
-  def from_rows!(rows, schema) do
-    case from_rows(rows, schema) do
+  @spec from_rows!(list(map()), Schema.t(), keyword()) :: t()
+  def from_rows!(rows, schema, opts \\ []) do
+    case from_rows(rows, schema, opts) do
       {:ok, data} -> data
       {:error, error} -> raise error
     end
@@ -185,21 +197,13 @@ defmodule Milvex.Data do
     Map.get(fields, name)
   end
 
-  defp transpose_rows_to_columns(rows, schema) do
+  defp transpose_rows_to_columns(rows, schema, partial_update) do
     function_output_fields = get_function_output_fields(schema)
     dynamic_schema_field_names = get_dynamic_schema_field_names(schema)
 
-    # Fields to include in insert (excludes auto_id, function outputs, and is_dynamic fields)
     insertable_field_names =
-      schema.fields
-      |> Enum.filter(fn f ->
-        not f.auto_id and
-          f.name not in function_output_fields and
-          not f.is_dynamic
-      end)
-      |> Enum.map(& &1.name)
+      insertable_field_names(rows, schema, partial_update, function_output_fields)
 
-    # ALL static field names (for undefined dynamic field detection)
     all_static_field_names =
       schema.fields
       |> Enum.map(& &1.name)
@@ -224,6 +228,36 @@ defmodule Milvex.Data do
     else
       columns
     end
+  end
+
+  defp insertable_field_names(_rows, schema, false, function_output_fields) do
+    schema.fields
+    |> Enum.filter(fn f ->
+      not f.auto_id and
+        f.name not in function_output_fields and
+        not f.is_dynamic
+    end)
+    |> Enum.map(& &1.name)
+  end
+
+  defp insertable_field_names(rows, schema, true, function_output_fields) do
+    provided_keys = provided_row_keys(rows)
+
+    schema.fields
+    |> Enum.filter(fn f ->
+      f.name not in function_output_fields and
+        not f.is_dynamic and
+        f.name in provided_keys
+    end)
+    |> Enum.map(& &1.name)
+  end
+
+  defp provided_row_keys([]), do: []
+
+  defp provided_row_keys([first | _]) do
+    first
+    |> Map.keys()
+    |> Enum.map(&to_string/1)
   end
 
   defp add_dynamic_fields(columns, rows, schema_field_names, dynamic_schema_field_names) do
@@ -323,10 +357,15 @@ defmodule Milvex.Data do
     end)
   end
 
-  defp validate_rows([], _schema), do: :ok
+  defp validate_rows([], _schema, _partial_update), do: :ok
 
-  defp validate_rows(rows, schema) do
-    required_fields = get_required_field_names(schema)
+  defp validate_rows(rows, schema, partial_update) do
+    required_fields =
+      if partial_update do
+        get_primary_key_field_names(schema)
+      else
+        get_required_field_names(schema)
+      end
 
     with :ok <- validate_row_consistency(rows) do
       validate_required_fields_present(rows, required_fields)
@@ -412,6 +451,13 @@ defmodule Milvex.Data do
       not field.auto_id and not field.nullable and not field.is_dynamic and
         field.name not in function_output_fields
     end)
+    |> Enum.map(& &1.name)
+    |> MapSet.new()
+  end
+
+  defp get_primary_key_field_names(schema) do
+    schema.fields
+    |> Enum.filter(& &1.is_primary_key)
     |> Enum.map(& &1.name)
     |> MapSet.new()
   end

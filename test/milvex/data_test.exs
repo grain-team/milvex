@@ -101,6 +101,102 @@ defmodule Milvex.DataTest do
     end
   end
 
+  describe "from_rows/3 with :partial_update" do
+    setup do
+      schema =
+        Schema.build!(
+          name: "test",
+          fields: [
+            Field.primary_key("id", :int64),
+            Field.varchar("title", 256),
+            Field.scalar("score", :float),
+            Field.vector("embedding", 4)
+          ]
+        )
+
+      {:ok, schema: schema}
+    end
+
+    test "accepts rows missing non-primary-key fields", %{schema: schema} do
+      rows = [
+        %{id: 1, score: 8.5},
+        %{id: 2, score: 9.0}
+      ]
+
+      {:ok, data} = Data.from_rows(rows, schema, partial_update: true)
+
+      assert Data.num_rows(data) == 2
+      assert Data.get_field(data, "id") == [1, 2]
+      assert Data.get_field(data, "score") == [8.5, 9.0]
+    end
+
+    test "produces fields_data only for provided columns", %{schema: schema} do
+      rows = [%{id: 1, score: 8.5}]
+
+      {:ok, data} = Data.from_rows(rows, schema, partial_update: true)
+
+      field_names = Data.field_names(data) |> Enum.sort()
+      assert field_names == ["id", "score"]
+
+      proto = Data.to_proto(data)
+      assert Enum.map(proto, & &1.field_name) |> Enum.sort() == ["id", "score"]
+    end
+
+    test "still rejects rows missing the primary key", %{schema: schema} do
+      rows = [%{title: "no pk", score: 1.0}]
+
+      assert {:error, error} = Data.from_rows(rows, schema, partial_update: true)
+      assert error.message =~ "missing required fields"
+      assert error.message =~ "id"
+    end
+
+    test "still rejects rows with inconsistent key sets", %{schema: schema} do
+      rows = [
+        %{id: 1, score: 1.0},
+        %{id: 2, title: "different"}
+      ]
+
+      assert {:error, error} = Data.from_rows(rows, schema, partial_update: true)
+      assert error.message =~ "different fields"
+    end
+
+    test "includes auto_id primary key when caller provides it" do
+      schema =
+        Schema.build!(
+          name: "test",
+          fields: [
+            Field.primary_key("id", :int64, auto_id: true),
+            Field.varchar("name", 128)
+          ]
+        )
+
+      rows = [%{id: 42, name: "Alice"}]
+
+      {:ok, data} = Data.from_rows(rows, schema, partial_update: true)
+
+      assert Data.get_field(data, "id") == [42]
+      assert Data.get_field(data, "name") == ["Alice"]
+
+      proto_names = data |> Data.to_proto() |> Enum.map(& &1.field_name) |> Enum.sort()
+      assert proto_names == ["id", "name"]
+    end
+
+    test "default (no opt) preserves strict validation", %{schema: schema} do
+      rows = [%{id: 1, title: "incomplete"}]
+
+      assert {:error, error} = Data.from_rows(rows, schema)
+      assert error.message =~ "missing required fields"
+    end
+
+    test "from_rows! works with opts", %{schema: schema} do
+      rows = [%{id: 1, score: 8.5}]
+
+      data = Data.from_rows!(rows, schema, partial_update: true)
+
+      assert Data.num_rows(data) == 1
+    end
+  end
+
   describe "from_columns/2" do
     setup do
       schema =

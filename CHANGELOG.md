@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/grain-team/milvex/compare/v0.10.2...v0.11.0) (2026-04-30)
+
+
+### Features
+
+* Implements support for partial_updates ([2b5a909](https://github.com/grain-team/milvex/commit/2b5a9094489f0762d189c02f34184ba79ede1848))
+
 ## [0.10.2](https://github.com/grain-team/milvex/compare/v0.10.1...v0.10.2) (2026-03-25)
 
 

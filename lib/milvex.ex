@@ -11,7 +11,6 @@ defmodule Milvex do
   alias Milvex.Error
   alias Milvex.Errors.Invalid
   alias Milvex.ExprParams
-  alias Milvex.Highlighter, as: MilvexHighlighter
   alias Milvex.Index
   alias Milvex.QueryResult
   alias Milvex.Ranker.DecayRanker
@@ -19,13 +18,9 @@ defmodule Milvex do
   alias Milvex.Ranker.WeightedRanker
   alias Milvex.RPC
   alias Milvex.Schema
-  alias Milvex.Schema.Field
   alias Milvex.SearchResult
 
-  alias Milvex.Milvus.Proto.Common.Highlighter, as: ProtoHighlighter
   alias Milvex.Milvus.Proto.Common.KeyValuePair
-  alias Milvex.Milvus.Proto.Common.PlaceholderGroup
-  alias Milvex.Milvus.Proto.Common.PlaceholderValue
 
   alias Milvex.Milvus.Proto.Schema.CollectionSchema
   alias Milvex.Milvus.Proto.Schema.FunctionSchema
@@ -61,7 +56,7 @@ defmodule Milvex do
   @default_consistency_level :Bounded
   @default_shards_num 1
   @default_top_k 10
-  @nested_field_regex ~r/^(\w+)\[(\w+)\]$/
+  @max_offset_plus_limit 16_384
 
   @typedoc """
   A collection identifier - either a string name or a module using `Milvex.Collection`.
@@ -820,11 +815,19 @@ defmodule Milvex do
         output_fields: ["id", "title", "year"],
         limit: 100
       )
+
+  ## Pagination
+
+  `:offset + :limit` must be `<= 16384` (Milvus server-side hard cap). Over the
+  cap returns `{:error, %Milvex.Errors.Invalid{}}`. For deeper walks across a
+  collection, use `query_stream/4`, which advances by primary-key cursor and
+  has no offset cap. See `guides/pagination_and_streaming.md`.
   """
   @spec query(GenServer.server(), collection_ref(), String.t(), keyword()) ::
           {:ok, QueryResult.t()} | {:error, Error.t()}
   def query(conn, collection, expr, opts \\ []) do
-    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
+    with :ok <- validate_offset_limit_cap(opts, :query),
+         {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
       request = %QueryRequest{
         db_name: get_db_name(opts),
         collection_name: resolve_collection_name(collection),
@@ -919,6 +922,14 @@ defmodule Milvex do
       )
       result.hits[:matrix_like]     # => [%Hit{}, ...]
       result.hits[:inception_like]  # => [%Hit{}, ...]
+
+  ## Pagination
+
+  `:offset + :limit` (or `:offset + :top_k`) must be `<= 16384` (Milvus
+  server-side hard cap). Over the cap returns `{:error, %Milvex.Errors.Invalid{}}`.
+  For deeper paging on a single-vector search, use `search_stream/4`, which is
+  backed by Milvus's iterator V2 protocol and has no offset cap.
+  See `guides/pagination_and_streaming.md`.
   """
   @spec search(GenServer.server(), collection_ref(), vector_queries(), keyword()) ::
           {:ok, SearchResult.t()} | {:error, Error.t()}
@@ -937,7 +948,8 @@ defmodule Milvex do
   def search(conn, collection, vectors, opts) when is_list(vectors) do
     collection_name = resolve_collection_name(collection)
 
-    with {:ok, vector_field} <- require_option(opts, :vector_field),
+    with :ok <- validate_offset_limit_cap(opts, :search),
+         {:ok, vector_field} <- require_option(opts, :vector_field),
          {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts),
          {:ok, schema} <- resolve_schema(conn, collection, collection_name, opts),
          {:ok, field, is_nested} <- find_vector_field(schema, vector_field),
@@ -1005,6 +1017,15 @@ defmodule Milvex do
       {:ok, results} = Milvex.hybrid_search(conn, "products", [search1, search2], ranker,
         output_fields: ["title", "price"]
       )
+
+  ## Pagination
+
+  `:offset + :limit` must be `<= 16384` (Milvus server-side hard cap). Over the
+  cap returns `{:error, %Milvex.Errors.Invalid{}}`. There is no streaming
+  iterator for hybrid search — Milvus's iterator protocol does not support
+  sub-requests with reranking. For deeper pagination on hybrid queries,
+  narrow the filter, batch the rerank yourself, or post-process results from
+  multiple `search_stream/4` runs.
   """
   @spec hybrid_search(
           GenServer.server(),
@@ -1039,10 +1060,80 @@ defmodule Milvex do
     )
   end
 
+  @doc """
+  Streams search results lazily using Milvus's native search-iterator V2 protocol.
+
+  Each element of the returned `Stream.t()` is a single `Milvex.SearchResult.Hit`.
+  Errors raise from inside the stream rather than being yielded as `{:error, _}` tuples,
+  matching the convention of `File.stream!/1`, `IO.stream/2`, and `Postgrex` cursors.
+
+  Iterator mode requires Milvus >= 2.4 and accepts only a **single** query vector.
+  For multi-vector or named queries, use `search/4` with `:offset`/`:limit`.
+
+  ## Examples
+
+      Milvex.search_stream(conn, "movies", [0.1, 0.2, 0.3, 0.4],
+        vector_field: "embedding",
+        filter: "year > 2020",
+        batch_size: 500
+      )
+      |> Stream.take(10_000)
+      |> Enum.to_list()
+
+  ## Options
+
+  See module docs and the design spec for the full option matrix. Notable rejections:
+  `:offset`, `:top_k`, `:group_by_field`, `:group_size`, `:strict_group_size` all raise
+  `Milvex.Errors.Invalid` — these are server-iterator constraints, not implementation gaps.
+  """
+  @spec search_stream(GenServer.server(), collection_ref(), [number()], keyword()) ::
+          Enumerable.t()
+  def search_stream(conn, collection, vector, opts \\ []) do
+    Milvex.Iterator.search_stream(conn, collection, vector, opts)
+  end
+
+  @doc """
+  Streams query results lazily using Milvus's native query iterator (PK-walk).
+
+  Each element of the returned `Stream.t()` is a single row map. Errors raise from
+  inside the stream rather than being yielded as `{:error, _}` tuples, matching the
+  convention of `File.stream!/1`, `IO.stream/2`, and `Postgrex` cursors.
+
+  Use `query_stream/4` for full-collection scans or filter-walks beyond the
+  `offset + limit <= 16384` cap on `query/4`.
+
+  ## Examples
+
+      Milvex.query_stream(conn, "movies", "year > 2000",
+        output_fields: ["id", "title", "year"],
+        batch_size: 1_000
+      )
+      |> Stream.filter(&(&1["year"] > 2010))
+      |> Enum.count()
+
+  ## Options
+
+    - `:batch_size` - Rows fetched per RPC (default: 1_000, max: 16_384)
+    - `:limit` - Total rows to emit before halting (default: unlimited)
+    - `:output_fields` - List of field names to return
+    - `:partition_names` - List of partitions to query
+    - `:db_name` - Database name (default: "")
+    - `:consistency_level` - Consistency level (default: `:Bounded`)
+    - `:expr_params` - Template parameters map for the filter expression
+
+  `:offset` is rejected — the iterator advances by primary-key cursor, not offset.
+  """
+  @spec query_stream(GenServer.server(), collection_ref(), String.t(), keyword()) ::
+          Enumerable.t()
+  def query_stream(conn, collection, expr, opts \\ []) do
+    Milvex.Iterator.query_stream(conn, collection, expr, opts)
+  end
+
   defp do_hybrid_search(conn, collection, searches, ranker, opts, extra \\ []) do
     collection_name = resolve_collection_name(collection)
 
-    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts),
+    with :ok <- validate_offset_limit_cap(opts, :hybrid),
+         {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts),
          {:ok, schema} <- resolve_schema(conn, collection, collection_name, opts),
          {:ok, search_requests} <- build_search_requests(searches, schema) do
       request = %HybridSearchRequest{
@@ -1096,31 +1187,6 @@ defmodule Milvex do
 
       {:ok, request}
     end
-  end
-
-  defp build_ann_placeholder_group(data, field, is_nested) do
-    cond do
-      all_vectors_data?(data) -> build_placeholder_group(data, field, is_nested)
-      all_strings_data?(data) -> build_text_placeholder_group(data)
-      true -> {:error, Invalid.exception(field: :data, message: "invalid data format")}
-    end
-  end
-
-  defp all_vectors_data?(data), do: Enum.all?(data, &is_list/1)
-  defp all_strings_data?(data), do: Enum.all?(data, &is_binary/1)
-
-  defp build_text_placeholder_group(texts) do
-    placeholder = %PlaceholderValue{
-      tag: "$0",
-      type: :VarChar,
-      values: texts
-    }
-
-    group = %PlaceholderGroup{placeholders: [placeholder]}
-    {:ok, PlaceholderGroup.encode(group)}
-  rescue
-    e ->
-      {:error, Invalid.exception(field: :data, message: "Failed to encode text: #{inspect(e)}")}
   end
 
   defp build_ann_search_params(%AnnSearch{anns_field: field, limit: limit, params: params}) do
@@ -1190,27 +1256,7 @@ defmodule Milvex do
     |> maybe_add_param("ignore_growing", opts[:ignore_growing])
   end
 
-  defp build_highlighter(nil), do: nil
-
-  defp build_highlighter(%MilvexHighlighter{type: type, params: params}) do
-    proto_type =
-      case type do
-        :lexical -> :Lexical
-        :semantic -> :Semantic
-      end
-
-    kvs =
-      Enum.map(params, fn {key, value} ->
-        %KeyValuePair{key: to_string(key), value: encode_highlighter_value(value)}
-      end)
-
-    %ProtoHighlighter{type: proto_type, params: kvs}
-  end
-
-  defp encode_highlighter_value(value) when is_list(value), do: Jason.encode!(value)
-  defp encode_highlighter_value(value) when is_binary(value), do: value
-  defp encode_highlighter_value(value) when is_boolean(value), do: to_string(value)
-  defp encode_highlighter_value(value) when is_number(value), do: to_string(value)
+  defp build_highlighter(highlight), do: Milvex.Internal.build_highlighter(highlight)
 
   # ============================================================================
   # Partition Operations
@@ -1510,26 +1556,16 @@ defmodule Milvex do
     end
   end
 
-  defp resolve_collection_name(name) when is_binary(name), do: name
+  defp resolve_collection_name(name), do: Milvex.Internal.resolve_collection_name(name)
 
-  defp resolve_collection_name(module) when is_atom(module) do
-    Milvex.Collection.collection_name(module)
-  end
-
-  defp resolve_schema(_conn, module, _collection_name, _opts) when is_atom(module) do
-    {:ok, Milvex.Collection.to_schema(module)}
-  end
-
-  defp resolve_schema(conn, name, collection_name, opts) when is_binary(name) do
-    Logger.warning(
-      "Passing a collection name string to search/hybrid_search triggers a " <>
-        "describe_collection RPC on every call. Pass a Collection module instead. " <>
-        "String-based schema resolution will be deprecated in a future version."
+  defp resolve_schema(conn, collection, collection_name, opts) do
+    Milvex.Internal.resolve_schema(
+      conn,
+      collection,
+      collection_name,
+      opts,
+      &describe_collection/3
     )
-
-    with {:ok, info} <- describe_collection(conn, collection_name, opts) do
-      {:ok, info.schema}
-    end
   end
 
   defp get_db_name(opts), do: Keyword.get(opts, :db_name, "")
@@ -1604,148 +1640,60 @@ defmodule Milvex do
     end
   end
 
-  defp find_vector_field(schema, field_name) do
-    case parse_nested_field_name(field_name) do
-      {:nested, parent_name, child_name} ->
-        find_nested_vector_field(schema, field_name, parent_name, child_name)
+  @spec validate_offset_limit_cap(keyword(), :search | :query | :hybrid) ::
+          :ok | {:error, Milvex.Error.t()}
+  defp validate_offset_limit_cap(opts, mode) do
+    offset = Keyword.get(opts, :offset, 0)
+    limit = effective_limit(opts, mode)
 
-      :simple ->
-        find_simple_vector_field(schema, field_name)
-    end
-  end
+    cond do
+      not is_integer(offset) or offset < 0 ->
+        :ok
 
-  defp parse_nested_field_name(field_name) do
-    case Regex.run(@nested_field_regex, field_name) do
-      [_, parent, child] -> {:nested, parent, child}
-      nil -> :simple
-    end
-  end
+      not is_integer(limit) or limit < 0 ->
+        :ok
 
-  defp find_simple_vector_field(schema, field_name) do
-    case Schema.get_field(schema, field_name) do
-      nil ->
-        {:error,
-         Invalid.exception(field: :vector_field, message: "Field '#{field_name}' not found")}
-
-      field ->
-        if Field.vector_type?(field.data_type) do
-          {:ok, field, false}
-        else
-          {:error,
-           Invalid.exception(
-             field: :vector_field,
-             message: "Field '#{field_name}' is not a vector field"
-           )}
-        end
-    end
-  end
-
-  defp find_nested_vector_field(schema, full_name, parent_name, child_name) do
-    case Schema.get_field(schema, parent_name) do
-      nil ->
-        {:error,
-         Invalid.exception(field: :vector_field, message: "Field '#{full_name}' not found")}
-
-      %{data_type: :array_of_struct, struct_schema: struct_schema} when is_list(struct_schema) ->
-        find_child_vector_field(struct_schema, full_name, child_name)
-
-      _ ->
+      offset + limit > @max_offset_plus_limit ->
         {:error,
          Invalid.exception(
-           field: :vector_field,
-           message: "Field '#{parent_name}' is not an array_of_struct field"
+           field: :offset,
+           message: format_cap_message(offset, limit, mode)
          )}
+
+      true ->
+        :ok
     end
   end
 
-  defp find_child_vector_field(struct_schema, full_name, child_name) do
-    case Enum.find(struct_schema, &(&1.name == child_name)) do
-      nil ->
-        {:error,
-         Invalid.exception(field: :vector_field, message: "Field '#{full_name}' not found")}
-
-      field ->
-        validate_nested_vector_field(field, full_name)
+  defp effective_limit(opts, :search) do
+    case Keyword.fetch(opts, :limit) do
+      {:ok, limit} -> limit
+      :error -> Keyword.get(opts, :top_k, 0)
     end
   end
 
-  defp validate_nested_vector_field(field, full_name) do
-    if Field.vector_type?(field.data_type) do
-      {:ok, field, true}
-    else
-      {:error,
-       Invalid.exception(
-         field: :vector_field,
-         message: "Field '#{full_name}' is not a vector field"
-       )}
-    end
+  defp effective_limit(opts, _other), do: Keyword.get(opts, :limit, 0)
+
+  defp format_cap_message(offset, limit, mode) do
+    "offset + limit must be <= #{@max_offset_plus_limit} " <>
+      "(got: offset=#{offset}, limit=#{limit}); " <>
+      cap_suggestion(mode)
   end
 
-  defp build_placeholder_group(vectors, field, is_nested) do
-    placeholder_type = vector_type_to_placeholder_type(field.data_type, is_nested)
-    dim = field.dimension
+  defp cap_suggestion(:search), do: "use Milvex.search_stream/4 for deeper paging"
+  defp cap_suggestion(:query), do: "use Milvex.query_stream/4 for deeper paging"
 
-    encoded_values =
-      Enum.map(vectors, fn vec ->
-        encode_vector(vec, field.data_type, dim)
-      end)
+  defp cap_suggestion(:hybrid),
+    do:
+      "hybrid_search has no iterator; narrow the query with stricter filters or batch the rerank yourself"
 
-    placeholder = %PlaceholderValue{
-      tag: "$0",
-      type: placeholder_type,
-      values: encoded_values
-    }
-
-    group = %PlaceholderGroup{placeholders: [placeholder]}
-    {:ok, PlaceholderGroup.encode(group)}
-  rescue
-    e ->
-      {:error,
-       Invalid.exception(field: :vectors, message: "Failed to encode vectors: #{inspect(e)}")}
+  defp find_vector_field(schema, field_name) do
+    Milvex.Internal.find_vector_field(schema, field_name)
   end
 
-  defp vector_type_to_placeholder_type(type, true) do
-    case type do
-      :float_vector -> :EmbListFloatVector
-      :binary_vector -> :EmbListBinaryVector
-      :float16_vector -> :EmbListFloat16Vector
-      :bfloat16_vector -> :EmbListBFloat16Vector
-      :sparse_float_vector -> :EmbListSparseFloatVector
-      :int8_vector -> :EmbListInt8Vector
-      _ -> :EmbListFloatVector
-    end
+  defp build_ann_placeholder_group(data, field, is_nested) do
+    Milvex.Internal.build_ann_placeholder_group(data, field, is_nested)
   end
-
-  defp vector_type_to_placeholder_type(type, false) do
-    case type do
-      :float_vector -> :FloatVector
-      :binary_vector -> :BinaryVector
-      :float16_vector -> :Float16Vector
-      :bfloat16_vector -> :BFloat16Vector
-      :sparse_float_vector -> :SparseFloatVector
-      :int8_vector -> :Int8Vector
-      _ -> :FloatVector
-    end
-  end
-
-  defp encode_vector(vec, :float_vector, _dim) do
-    vec
-    |> Enum.map(&float_to_binary/1)
-    |> IO.iodata_to_binary()
-  end
-
-  defp encode_vector(vec, :binary_vector, _dim) do
-    IO.iodata_to_binary(vec)
-  end
-
-  defp encode_vector(vec, _type, _dim) do
-    vec
-    |> Enum.map(&float_to_binary/1)
-    |> IO.iodata_to_binary()
-  end
-
-  defp float_to_binary(f) when is_float(f), do: <<f::little-float-32>>
-  defp float_to_binary(i) when is_integer(i), do: <<i * 1.0::little-float-32>>
 
   defp build_search_params(opts, vector_field) do
     params = [%KeyValuePair{key: "anns_field", value: vector_field}]

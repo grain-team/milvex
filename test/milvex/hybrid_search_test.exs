@@ -182,4 +182,27 @@ defmodule Milvex.HybridSearchTest do
       assert find_param.("ignore_growing").value == "true"
     end
   end
+
+  describe "hybrid_search/5 offset+limit cap validation" do
+    test "rejects offset+limit > 16384 with a clear Invalid error" do
+      reject(&Connection.get_channel/2)
+      reject(&RPC.call/5)
+
+      {:ok, search1} = AnnSearch.new("field1", [[0.1, 0.2]], limit: 10)
+      {:ok, search2} = AnnSearch.new("field2", [[0.3, 0.4]], limit: 10)
+      {:ok, ranker} = Ranker.rrf()
+
+      assert {:error, error} =
+               Milvex.hybrid_search(:conn, "test", [search1, search2], ranker,
+                 offset: 8_000,
+                 limit: 9_000
+               )
+
+      assert %Milvex.Errors.Invalid{} = error
+      assert error.field == :offset
+      assert error.message =~ "16384"
+      assert error.message =~ "narrow"
+      refute error.message =~ "query_stream"
+    end
+  end
 end

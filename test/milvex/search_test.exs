@@ -273,4 +273,62 @@ defmodule Milvex.SearchTest do
       assert Enum.find(params, &(&1.key == "ignore_growing")) == nil
     end
   end
+
+  describe "search/4 offset+limit cap validation" do
+    test "rejects offset+limit > 16384 with a clear Invalid error" do
+      assert {:error, error} =
+               Milvex.search(:conn, "test", [[0.1, 0.2, 0.3, 0.4]],
+                 vector_field: "embedding",
+                 offset: 16_000,
+                 limit: 500
+               )
+
+      assert %Milvex.Errors.Invalid{} = error
+      assert error.field == :offset
+      assert error.message =~ "16384"
+      assert error.message =~ "search_stream"
+    end
+
+    test "uses :top_k as the limit component when :limit is not provided" do
+      assert {:error, error} =
+               Milvex.search(:conn, "test", [[0.1, 0.2, 0.3, 0.4]],
+                 vector_field: "embedding",
+                 offset: 16_000,
+                 top_k: 500
+               )
+
+      assert %Milvex.Errors.Invalid{} = error
+      assert error.message =~ "16384"
+    end
+
+    test "passes through when offset+limit <= 16384" do
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel, @config} end)
+
+      stub(RPC, :call, fn _channel, _stub, method, _request, _opts ->
+        case method do
+          :describe_collection -> @describe_response
+          :search -> @search_response
+        end
+      end)
+
+      assert {:ok, _result} =
+               Milvex.search(:conn, "test", [[0.1, 0.2, 0.3, 0.4]],
+                 vector_field: "embedding",
+                 offset: 100,
+                 limit: 100
+               )
+    end
+
+    test "validation runs before any RPC is issued" do
+      reject(&Connection.get_channel/2)
+      reject(&RPC.call/5)
+
+      assert {:error, %Milvex.Errors.Invalid{}} =
+               Milvex.search(:conn, "test", [[0.1, 0.2, 0.3, 0.4]],
+                 vector_field: "embedding",
+                 offset: 8_000,
+                 limit: 9_000
+               )
+    end
+  end
 end

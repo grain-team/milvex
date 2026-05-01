@@ -28,6 +28,7 @@ defmodule Milvex.MixProject do
           "guides/getting-started.md": [title: "Getting Started"],
           "guides/architecture.md": [title: "Architecture"],
           "guides/error-handling.md": [title: "Error Handling"],
+          "guides/pagination_and_streaming.md": [title: "Pagination and Streaming"],
           "CHANGELOG.md": [title: "Changelog"],
           LICENSE: [title: "License"]
         ],
@@ -35,7 +36,8 @@ defmodule Milvex.MixProject do
           Guides: [
             "guides/getting-started.md",
             "guides/architecture.md",
-            "guides/error-handling.md"
+            "guides/error-handling.md",
+            "guides/pagination_and_streaming.md"
           ],
           About: [
             "README.md",

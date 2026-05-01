@@ -595,6 +595,19 @@ defmodule MilvexClientTest do
       assert {:ok, result} = Milvex.query(:conn, "test", "id > 0", limit: 10, offset: 20)
       assert %Milvex.QueryResult{} = result
     end
+
+    test "rejects offset+limit > 16384 with a clear Invalid error" do
+      reject(&Connection.get_channel/2)
+      reject(&RPC.call/5)
+
+      assert {:error, error} =
+               Milvex.query(:conn, "test", "id > 0", offset: 16_000, limit: 500)
+
+      assert %Milvex.Errors.Invalid{} = error
+      assert error.field == :offset
+      assert error.message =~ "16384"
+      assert error.message =~ "query_stream"
+    end
   end
 
   describe "search/4" do

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/grain-team/milvex/compare/v0.11.0...v0.12.0) (2026-05-04)
+
+
+### Features
+
+* add search_stream backed by Milvus search iterator V2 ([0290d8d](https://github.com/grain-team/milvex/commit/0290d8d36093dae721e65425374ca78ee936cb16))
+
 ## [0.11.0](https://github.com/grain-team/milvex/compare/v0.10.2...v0.11.0) (2026-04-30)
 
 

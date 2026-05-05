@@ -11,6 +11,7 @@ defmodule Milvex do
   alias Milvex.Error
   alias Milvex.Errors.Invalid
   alias Milvex.ExprParams
+  alias Milvex.Function
   alias Milvex.Index
   alias Milvex.QueryResult
   alias Milvex.Ranker.DecayRanker
@@ -23,21 +24,33 @@ defmodule Milvex do
   alias Milvex.Milvus.Proto.Common.KeyValuePair
 
   alias Milvex.Milvus.Proto.Schema.CollectionSchema
+  alias Milvex.Milvus.Proto.Schema.FieldSchema
   alias Milvex.Milvus.Proto.Schema.FunctionSchema
   alias Milvex.Milvus.Proto.Schema.FunctionScore
   alias Milvex.Milvus.Proto.Schema.IDs
   alias Milvex.Milvus.Proto.Schema.LongArray
   alias Milvex.Milvus.Proto.Schema.StringArray
 
+  alias Milvex.Milvus.Proto.Milvus.AddCollectionFieldRequest
+  alias Milvex.Milvus.Proto.Milvus.AddCollectionFunctionRequest
+  alias Milvex.Milvus.Proto.Milvus.AlterCollectionFieldRequest
+  alias Milvex.Milvus.Proto.Milvus.AlterCollectionFunctionRequest
+  alias Milvex.Milvus.Proto.Milvus.AlterCollectionRequest
+  alias Milvex.Milvus.Proto.Milvus.AlterCollectionSchemaRequest
+  alias Milvex.Milvus.Proto.Milvus.AlterCollectionSchemaResponse
+  alias Milvex.Milvus.Proto.Milvus.AlterIndexRequest
   alias Milvex.Milvus.Proto.Milvus.CreateCollectionRequest
   alias Milvex.Milvus.Proto.Milvus.CreateIndexRequest
   alias Milvex.Milvus.Proto.Milvus.CreatePartitionRequest
   alias Milvex.Milvus.Proto.Milvus.DeleteRequest
   alias Milvex.Milvus.Proto.Milvus.DescribeCollectionRequest
   alias Milvex.Milvus.Proto.Milvus.DescribeIndexRequest
+  alias Milvex.Milvus.Proto.Milvus.DropCollectionFunctionRequest
   alias Milvex.Milvus.Proto.Milvus.DropCollectionRequest
   alias Milvex.Milvus.Proto.Milvus.DropIndexRequest
   alias Milvex.Milvus.Proto.Milvus.DropPartitionRequest
+  alias Milvex.Milvus.Proto.Milvus.GetLoadStateRequest
+  alias Milvex.Milvus.Proto.Milvus.GetVersionRequest
   alias Milvex.Milvus.Proto.Milvus.HasCollectionRequest
   alias Milvex.Milvus.Proto.Milvus.HasPartitionRequest
   alias Milvex.Milvus.Proto.Milvus.HybridSearchRequest
@@ -52,6 +65,18 @@ defmodule Milvex do
   alias Milvex.Milvus.Proto.Milvus.ShowCollectionsRequest
   alias Milvex.Milvus.Proto.Milvus.ShowPartitionsRequest
   alias Milvex.Milvus.Proto.Milvus.UpsertRequest
+
+  alias Milvex.Milvus.Proto.Milvus.AlterCollectionSchemaRequest.Action,
+    as: AlterCollectionSchemaAction
+
+  alias Milvex.Milvus.Proto.Milvus.AlterCollectionSchemaRequest.AddRequest,
+    as: AlterCollectionSchemaAddRequest
+
+  alias Milvex.Milvus.Proto.Milvus.AlterCollectionSchemaRequest.DropRequest,
+    as: AlterCollectionSchemaDropRequest
+
+  alias Milvex.Milvus.Proto.Milvus.AlterCollectionSchemaRequest.FieldInfo,
+    as: AlterCollectionSchemaFieldInfo
 
   @default_consistency_level :Bounded
   @default_shards_num 1
@@ -1553,6 +1578,400 @@ defmodule Milvex do
     end
   end
 
+  @doc """
+  Returns the Milvus server version (semantic version string).
+
+  ## Returns
+
+    - `{:ok, "2.6.1"}` on success
+    - `{:error, error}` on failure
+  """
+  @spec get_version(GenServer.server(), keyword()) ::
+          {:ok, String.t()} | {:error, Error.t()}
+  def get_version(conn, opts \\ []) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
+      with {:ok, response} <-
+             RPC.call(
+               channel_fn,
+               MilvusService.Stub,
+               :get_version,
+               %GetVersionRequest{},
+               rpc_opts
+             ),
+           {:ok, resp} <- RPC.with_status_check(response, "GetVersion") do
+        {:ok, resp.version}
+      end
+    end
+  end
+
+  @doc """
+  Returns the load state of a collection.
+
+  ## Options
+
+    - `:db_name` - Database name (default: "")
+    - `:partition_names` - List of partition names to scope the check
+
+  ## Returns
+
+    - `{:ok, :not_loaded | :loading | :loaded | :not_exist}` on success
+    - `{:error, error}` on failure
+  """
+  @spec get_load_state(GenServer.server(), collection_ref(), keyword()) ::
+          {:ok, :not_loaded | :loading | :loaded | :not_exist}
+          | {:error, Error.t()}
+  def get_load_state(conn, collection, opts \\ []) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
+      request = %GetLoadStateRequest{
+        db_name: get_db_name(opts),
+        collection_name: resolve_collection_name(collection),
+        partition_names: Keyword.get(opts, :partition_names, [])
+      }
+
+      with {:ok, response} <-
+             RPC.call(
+               channel_fn,
+               MilvusService.Stub,
+               :get_load_state,
+               request,
+               rpc_opts
+             ),
+           {:ok, resp} <- RPC.with_status_check(response, "GetLoadState") do
+        {:ok, normalize_load_state(resp.state)}
+      end
+    end
+  end
+
+  @doc """
+  Alters collection-level KV properties. Supports setting and deleting keys.
+
+  ## Options
+
+    - `:set` - Keyword list of properties to set (e.g. `[ttl_seconds: 3600]`)
+    - `:delete` - List of property keys to remove
+    - `:db_name` - Database name (default: "")
+
+  ## Returns
+
+    - `:ok` on success
+    - `{:error, error}` on failure
+  """
+  @spec alter_collection(GenServer.server(), collection_ref(), keyword()) ::
+          :ok | {:error, Error.t()}
+  def alter_collection(conn, collection, opts \\ []) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
+      request = %AlterCollectionRequest{
+        db_name: get_db_name(opts),
+        collection_name: resolve_collection_name(collection),
+        properties: build_kv_pairs(Keyword.get(opts, :set, [])),
+        delete_keys: Enum.map(Keyword.get(opts, :delete, []), &to_string/1)
+      }
+
+      with {:ok, response} <-
+             RPC.call(
+               channel_fn,
+               MilvusService.Stub,
+               :alter_collection,
+               request,
+               rpc_opts
+             ) do
+        RPC.check_status(response, "AlterCollection")
+      end
+    end
+  end
+
+  @doc """
+  Alters per-field KV properties (max_length widening, mmap, default value, etc).
+
+  Only KV-level field properties are alterable. Type/dimension/PK changes are
+  not supported by Milvus and must be handled by drop+recreate.
+
+  ## Options
+
+    - `:set` - Keyword list of properties to set
+    - `:delete` - List of property keys to remove
+    - `:db_name` - Database name (default: "")
+
+  ## Returns
+
+    - `:ok` on success
+    - `{:error, error}` on failure
+  """
+  @spec alter_collection_field(
+          GenServer.server(),
+          collection_ref(),
+          String.t(),
+          keyword()
+        ) :: :ok | {:error, Error.t()}
+  def alter_collection_field(conn, collection, field_name, opts \\ []) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
+      request = %AlterCollectionFieldRequest{
+        db_name: get_db_name(opts),
+        collection_name: resolve_collection_name(collection),
+        field_name: field_name,
+        properties: build_kv_pairs(Keyword.get(opts, :set, [])),
+        delete_keys: Enum.map(Keyword.get(opts, :delete, []), &to_string/1)
+      }
+
+      with {:ok, response} <-
+             RPC.call(
+               channel_fn,
+               MilvusService.Stub,
+               :alter_collection_field,
+               request,
+               rpc_opts
+             ) do
+        RPC.check_status(response, "AlterCollectionField")
+      end
+    end
+  end
+
+  @doc """
+  Adds a single field to an existing collection (Milvus < 2.6 path).
+
+  Newer Milvus versions can use `alter_collection_schema/3` for batch
+  add/drop. The field MUST be nullable or have a default; PK and vector
+  fields cannot be added this way.
+
+  ## Options
+
+    - `:db_name` - Database name (default: "")
+
+  ## Returns
+
+    - `:ok` on success
+    - `{:error, error}` on failure
+  """
+  @spec add_collection_field(
+          GenServer.server(),
+          collection_ref(),
+          Schema.Field.t(),
+          keyword()
+        ) :: :ok | {:error, Error.t()}
+  def add_collection_field(conn, collection, %Schema.Field{} = field, opts \\ []) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts),
+         {:ok, schema_bytes} <- encode_field_schema(field) do
+      request = %AddCollectionFieldRequest{
+        db_name: get_db_name(opts),
+        collection_name: resolve_collection_name(collection),
+        schema: schema_bytes
+      }
+
+      with {:ok, response} <-
+             RPC.call(
+               channel_fn,
+               MilvusService.Stub,
+               :add_collection_field,
+               request,
+               rpc_opts
+             ) do
+        RPC.check_status(response, "AddCollectionField")
+      end
+    end
+  end
+
+  @doc """
+  Atomically adds and/or drops fields on a collection (Milvus 2.6+).
+
+  Either `:add_fields` (with optional `:add_functions`) or `:drop_fields`
+  may be supplied — the request carries a oneof `action`, so a single call
+  performs either an add or a drop. The Milvus DropRequest can only target
+  one field per call, so `:drop_fields` accepts at most one name; pass
+  multiple by issuing multiple calls (the planner/runner is responsible for
+  sequencing them).
+
+  Function drops are not supported here — use `drop_collection_function/4`.
+
+  ## Options
+
+    - `:add_fields` - List of `Milvex.Schema.Field.t()` to add
+    - `:add_functions` - List of `Milvex.Function.t()` to add alongside fields
+    - `:drop_fields` - List with exactly one field name (string) to drop
+    - `:do_physical_backfill` - If true, physically backfill new fields
+      (default: false, logical add)
+    - `:db_name` - Database name (default: "")
+
+  The response carries both an `alter_status` and an `index_status`; both must
+  be successful for this call to return `:ok`.
+
+  ## Returns
+
+    - `:ok` on success
+    - `{:error, error}` on failure
+  """
+  @spec alter_collection_schema(GenServer.server(), collection_ref(), keyword()) ::
+          :ok | {:error, Error.t()}
+  def alter_collection_schema(conn, collection, opts \\ []) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts),
+         {:ok, action} <- build_schema_action(opts) do
+      request = %AlterCollectionSchemaRequest{
+        db_name: get_db_name(opts),
+        collection_name: resolve_collection_name(collection),
+        action: action
+      }
+
+      with {:ok, response} <-
+             RPC.call(
+               channel_fn,
+               MilvusService.Stub,
+               :alter_collection_schema,
+               request,
+               rpc_opts
+             ) do
+        check_alter_collection_schema_status(response)
+      end
+    end
+  end
+
+  @doc """
+  Alters runtime KV properties of an index (mmap, etc).
+
+  Structural params (`index_type`, `metric_type`, `M`, `nlist`, ...) are NOT
+  alterable via this call — drop and recreate the index instead.
+
+  ## Options
+
+    - `:set` - Keyword list of properties to set
+    - `:delete` - List of property keys to remove
+    - `:db_name` - Database name (default: "")
+
+  ## Returns
+
+    - `:ok` on success
+    - `{:error, error}` on failure
+  """
+  @spec alter_index(GenServer.server(), collection_ref(), String.t(), keyword()) ::
+          :ok | {:error, Error.t()}
+  def alter_index(conn, collection, index_name, opts \\ []) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
+      request = %AlterIndexRequest{
+        db_name: get_db_name(opts),
+        collection_name: resolve_collection_name(collection),
+        index_name: index_name,
+        extra_params: build_kv_pairs(Keyword.get(opts, :set, [])),
+        delete_keys: Enum.map(Keyword.get(opts, :delete, []), &to_string/1)
+      }
+
+      with {:ok, response} <-
+             RPC.call(
+               channel_fn,
+               MilvusService.Stub,
+               :alter_index,
+               request,
+               rpc_opts
+             ) do
+        RPC.check_status(response, "AlterIndex")
+      end
+    end
+  end
+
+  @doc """
+  Adds a function (BM25, embedding, ...) to an existing collection.
+
+  ## Options
+
+    - `:db_name` - Database name (default: "")
+  """
+  @spec add_collection_function(
+          GenServer.server(),
+          collection_ref(),
+          Function.t(),
+          keyword()
+        ) :: :ok | {:error, Error.t()}
+  def add_collection_function(conn, collection, %Function{} = function, opts \\ []) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
+      request = %AddCollectionFunctionRequest{
+        db_name: get_db_name(opts),
+        collection_name: resolve_collection_name(collection),
+        functionSchema: Function.to_proto(function)
+      }
+
+      with {:ok, response} <-
+             RPC.call(
+               channel_fn,
+               MilvusService.Stub,
+               :add_collection_function,
+               request,
+               rpc_opts
+             ) do
+        RPC.check_status(response, "AddCollectionFunction")
+      end
+    end
+  end
+
+  @doc """
+  Alters parameters of an existing collection function.
+
+  The function name in the supplied `Milvex.Function` is used as the target
+  to alter; the rest of the function fields are sent as the new schema.
+
+  ## Options
+
+    - `:db_name` - Database name (default: "")
+  """
+  @spec alter_collection_function(
+          GenServer.server(),
+          collection_ref(),
+          Function.t(),
+          keyword()
+        ) :: :ok | {:error, Error.t()}
+  def alter_collection_function(conn, collection, %Function{} = function, opts \\ []) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
+      request = %AlterCollectionFunctionRequest{
+        db_name: get_db_name(opts),
+        collection_name: resolve_collection_name(collection),
+        function_name: function.name,
+        functionSchema: Function.to_proto(function)
+      }
+
+      with {:ok, response} <-
+             RPC.call(
+               channel_fn,
+               MilvusService.Stub,
+               :alter_collection_function,
+               request,
+               rpc_opts
+             ) do
+        RPC.check_status(response, "AlterCollectionFunction")
+      end
+    end
+  end
+
+  @doc """
+  Drops a function from a collection by name.
+
+  ## Options
+
+    - `:db_name` - Database name (default: "")
+  """
+  @spec drop_collection_function(
+          GenServer.server(),
+          collection_ref(),
+          String.t(),
+          keyword()
+        ) :: :ok | {:error, Error.t()}
+  def drop_collection_function(conn, collection, function_name, opts \\ [])
+      when is_binary(function_name) do
+    with {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
+      request = %DropCollectionFunctionRequest{
+        db_name: get_db_name(opts),
+        collection_name: resolve_collection_name(collection),
+        function_name: function_name
+      }
+
+      with {:ok, response} <-
+             RPC.call(
+               channel_fn,
+               MilvusService.Stub,
+               :drop_collection_function,
+               request,
+               rpc_opts
+             ) do
+        RPC.check_status(response, "DropCollectionFunction")
+      end
+    end
+  end
+
   # ============================================================================
   # Private Helpers
   # ============================================================================
@@ -1743,5 +2162,116 @@ defmodule Milvex do
     |> maybe_add_param("strict_group_size", opts[:strict_group_size])
     |> maybe_add_param("round_decimal", opts[:round_decimal])
     |> maybe_add_param("ignore_growing", opts[:ignore_growing])
+  end
+
+  defp normalize_load_state(:LoadStateNotExist), do: :not_exist
+  defp normalize_load_state(:LoadStateNotLoad), do: :not_loaded
+  defp normalize_load_state(:LoadStateLoading), do: :loading
+  defp normalize_load_state(:LoadStateLoaded), do: :loaded
+
+  defp build_kv_pairs(properties) do
+    Enum.map(properties, fn {k, v} ->
+      %KeyValuePair{key: to_string(k), value: to_string(v)}
+    end)
+  end
+
+  defp encode_field_schema(%Schema.Field{} = field) do
+    proto = Schema.Field.to_proto(field)
+    {:ok, FieldSchema.encode(proto)}
+  rescue
+    e in [Protobuf.EncodeError] ->
+      {:error, Invalid.exception(field: :schema, message: Exception.message(e))}
+  end
+
+  defp build_schema_action(opts) do
+    cond do
+      Keyword.get(opts, :drop_functions, []) != [] ->
+        {:error,
+         Invalid.exception(
+           field: :drop_functions,
+           message:
+             "alter_collection_schema does not support dropping functions; " <>
+               "use Milvex.drop_collection_function/4"
+         )}
+
+      has_adds?(opts) ->
+        {:ok, wrap_action({:add_request, build_add_request(opts)})}
+
+      has_drops?(opts) ->
+        build_drop_action(opts)
+
+      true ->
+        {:error,
+         Invalid.exception(
+           field: :action,
+           message:
+             "alter_collection_schema requires :add_fields, :add_functions, " <>
+               "or :drop_fields"
+         )}
+    end
+  end
+
+  defp has_adds?(opts) do
+    Keyword.get(opts, :add_fields, []) != [] or
+      Keyword.get(opts, :add_functions, []) != []
+  end
+
+  defp has_drops?(opts) do
+    Keyword.get(opts, :drop_fields, []) != []
+  end
+
+  defp build_add_request(opts) do
+    field_infos =
+      opts
+      |> Keyword.get(:add_fields, [])
+      |> Enum.map(fn %Schema.Field{} = field ->
+        %AlterCollectionSchemaFieldInfo{field_schema: Schema.Field.to_proto(field)}
+      end)
+
+    func_schemas =
+      opts
+      |> Keyword.get(:add_functions, [])
+      |> Enum.map(fn %Function{} = function -> Function.to_proto(function) end)
+
+    %AlterCollectionSchemaAddRequest{
+      field_infos: field_infos,
+      func_schema: func_schemas,
+      do_physical_backfill: Keyword.get(opts, :do_physical_backfill, false)
+    }
+  end
+
+  defp build_drop_action(opts) do
+    case Keyword.get(opts, :drop_fields, []) do
+      [name] when is_binary(name) ->
+        request = %AlterCollectionSchemaDropRequest{field_identifier: {:field_name, name}}
+        {:ok, wrap_action({:drop_request, request})}
+
+      names when is_list(names) and length(names) > 1 ->
+        {:error,
+         Invalid.exception(
+           field: :drop_fields,
+           message: "AlterCollectionSchema drops at most one field per call; issue multiple calls"
+         )}
+
+      _ ->
+        {:error,
+         Invalid.exception(
+           field: :drop_fields,
+           message: "drop_fields must be a list with exactly one field name (string)"
+         )}
+    end
+  end
+
+  defp wrap_action(op_tuple) do
+    %AlterCollectionSchemaAction{op: op_tuple}
+  end
+
+  defp check_alter_collection_schema_status(%AlterCollectionSchemaResponse{
+         alter_status: alter_status,
+         index_status: index_status
+       }) do
+    with :ok <- RPC.check_status(alter_status, "AlterCollectionSchema") do
+      RPC.check_status(index_status, "AlterCollectionSchema (index)")
+    end
   end
 end

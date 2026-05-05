@@ -12,7 +12,8 @@ defmodule Milvex.MixProject do
       test_coverage: [tool: ExCoveralls],
       start_permanent: Mix.env() == :prod,
       dialyzer: [
-        plt_core_path: "_plts/core"
+        plt_core_path: "_plts/core",
+        plt_add_apps: [:mix]
       ],
       preferred_cli_env: [
         coveralls: :test,

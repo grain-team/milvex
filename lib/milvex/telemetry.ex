@@ -117,6 +117,78 @@ defmodule Milvex.Telemetry do
       * `:stacktrace` - The stacktrace
       * `:error_type` - Normalized error classification atom (see RPC exception docs)
 
+  ## Migration Events
+
+  Emitted via `:telemetry.span/3` from `Milvex.Migration.Runner` during
+  `mix milvex.migrate --apply`. Skipped (e.g. `--allow-drop` not given) and
+  blocked-by-impossible operations do NOT emit op-level events because they
+  are never dispatched.
+
+  ### `[:milvex, :migrate, :run, :start]`
+
+  Emitted when an apply run begins (wraps the entire run).
+
+    * Measurements: `%{system_time: integer()}`
+    * Metadata:
+      * `:mode` - Always `:apply`
+      * `:allow_drop` - Whether destructive ops are allowed (boolean)
+      * `:manage_load` - Whether to manage load state around mutations (boolean)
+
+  ### `[:milvex, :migrate, :run, :stop]`
+
+  Emitted when an apply run completes successfully.
+
+    * Measurements: `%{duration: integer()}` (in native time units)
+    * Metadata: same as `:start` plus:
+      * `:summary` - Counts map from `Milvex.Migration.Runner.ApplyReport`
+        (`:applied`, `:failed`, `:skipped_destructive`, etc.)
+
+  ### `[:milvex, :migrate, :run, :exception]`
+
+  Emitted when an apply run raises an exception.
+
+    * Measurements: `%{duration: integer()}` (in native time units)
+    * Metadata: same as `:start` plus:
+      * `:kind` - The exception kind (`:error`, `:exit`, `:throw`)
+      * `:reason` - The raw exception reason
+      * `:stacktrace` - The stacktrace
+
+  ### `[:milvex, :migrate, :op, :start]`
+
+  Emitted when a single migration operation is dispatched.
+
+    * Measurements: `%{system_time: integer()}`
+    * Metadata:
+      * `:kind` - The operation kind atom (e.g. `:create_collection`,
+        `:add_field`, `:create_index`)
+      * `:category` - One of `:additive`, `:destructive`, `:impossible`,
+        `:descriptive`
+      * `:collection_name` - The fully prefixed collection name
+      * `:module` - The originating `Milvex.Collection` DSL module
+      * `:requires_release` - Whether the op needs the collection released
+        (boolean)
+      * `:milvus_version` - The Milvus server version string captured at run
+        start
+
+  ### `[:milvex, :migrate, :op, :stop]`
+
+  Emitted when a single migration operation finishes.
+
+    * Measurements: `%{duration: integer()}` (in native time units)
+    * Metadata: same as `:start` plus:
+      * `:result` - The status atom or tuple from the operation
+        (e.g. `:ok`, `{:error, reason}`)
+
+  ### `[:milvex, :migrate, :op, :exception]`
+
+  Emitted when a single migration operation raises an exception.
+
+    * Measurements: `%{duration: integer()}` (in native time units)
+    * Metadata: same as `:start` plus:
+      * `:kind` - The exception kind
+      * `:reason` - The raw exception reason
+      * `:stacktrace` - The stacktrace
+
   ## Example
 
       :telemetry.attach_many(

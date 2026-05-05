@@ -249,8 +249,8 @@ defmodule Milvex.Integration.MigrationTest do
     end
   end
 
-  describe "index recreation" do
-    test "detects when index parameters differ", %{conn: conn} do
+  describe "boot-time index handling (additive only)" do
+    test "detects when index parameters differ but does not recreate", %{conn: conn} do
       name = unique_collection_name("idx_params")
       schema = standard_schema(name)
 
@@ -269,14 +269,17 @@ defmodule Milvex.Integration.MigrationTest do
       assert params["index_type"] == "HNSW"
       assert params["metric_type"] == "COSINE"
 
-      # A desired index with different M would trigger recreation
+      # A desired index with different M used to trigger recreation. Boot-time
+      # migration is now conservative and leaves the index alone; operators
+      # use `mix milvex.migrate --apply --allow-drop` for recreations.
       desired_index = Index.hnsw("embedding", :cosine, m: 16, ef_construction: 128)
-
-      # Check that parameters differ
       refute params["M"] == to_string(desired_index.params[:M])
     end
 
-    test "recreates index when metric type changes", %{conn: conn} do
+    test "drop+create still works as a manual recovery path", %{conn: conn} do
+      # The boot-time path is additive only, but the underlying drop_index +
+      # create_index RPCs are still valid; `mix milvex.migrate` uses them
+      # under the hood. This guards the RPC contract end-to-end.
       name = unique_collection_name("idx_metric")
       schema = standard_schema(name)
 
@@ -284,11 +287,9 @@ defmodule Milvex.Integration.MigrationTest do
 
       :ok = Milvex.create_collection(conn, name, schema)
 
-      # Create initial index with COSINE
       initial_index = Index.hnsw("embedding", :cosine, m: 8, ef_construction: 64)
       :ok = Milvex.create_index(conn, name, initial_index)
 
-      # Drop and recreate with L2 (simulating migration recreation)
       :ok = Milvex.drop_index(conn, name, "embedding")
 
       new_index = Index.hnsw("embedding", :l2, m: 8, ef_construction: 64)

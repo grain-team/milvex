@@ -358,6 +358,36 @@ defmodule Milvex.Integration.SearchQueryTest do
       end)
     end
 
+    test "orders results by a field descending", %{conn: conn, collection_name: name} do
+      assert_eventually(fn ->
+        with {:ok, result} <-
+               Milvex.query(conn, name, "id > 0", limit: 10, order_by: [desc: :id]),
+             rows <- result.rows,
+             true <- rows != [] do
+          rows
+          |> Enum.map(fn row -> Map.get(row, :id) || Map.get(row, "id") end)
+          |> then(fn ids -> ids == Enum.sort(ids, :desc) and List.first(ids) == 10 end)
+        else
+          _ -> false
+        end
+      end)
+    end
+
+    test "orders results by a field ascending", %{conn: conn, collection_name: name} do
+      assert_eventually(fn ->
+        with {:ok, result} <-
+               Milvex.query(conn, name, "id > 0", limit: 10, order_by: [asc: :id]),
+             rows <- result.rows,
+             true <- rows != [] do
+          rows
+          |> Enum.map(fn row -> Map.get(row, :id) || Map.get(row, "id") end)
+          |> then(fn ids -> ids == Enum.sort(ids, :asc) and List.first(ids) == 1 end)
+        else
+          _ -> false
+        end
+      end)
+    end
+
     test "fails with invalid expression", %{conn: conn, collection_name: name} do
       assert {:error, error} = Milvex.query(conn, name, "invalid !!! syntax")
       assert %Milvex.Errors.Grpc{} = error

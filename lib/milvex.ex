@@ -827,6 +827,7 @@ defmodule Milvex do
           {:ok, QueryResult.t()} | {:error, Error.t()}
   def query(conn, collection, expr, opts \\ []) do
     with :ok <- validate_offset_limit_cap(opts, :query),
+         {:ok, order_param} <- Milvex.OrderBy.to_param(opts[:order_by]),
          {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts) do
       request = %QueryRequest{
         db_name: get_db_name(opts),
@@ -834,7 +835,7 @@ defmodule Milvex do
         expr: expr,
         output_fields: Keyword.get(opts, :output_fields, []),
         partition_names: Keyword.get(opts, :partition_names, []),
-        query_params: build_query_params(opts),
+        query_params: build_query_params(opts, order_param),
         consistency_level: get_consistency_level(opts),
         expr_template_values: ExprParams.to_proto(opts[:expr_params])
       }
@@ -1618,11 +1619,15 @@ defmodule Milvex do
   defp extract_ids(%IDs{id_field: {:str_id, %StringArray{data: ids}}}), do: ids
   defp extract_ids(_), do: []
 
-  defp build_query_params(opts) do
+  defp build_query_params(opts, order_param) do
     []
     |> maybe_add_param("limit", opts[:limit])
     |> maybe_add_param("offset", opts[:offset])
+    |> maybe_prepend_param(order_param)
   end
+
+  defp maybe_prepend_param(params, nil), do: params
+  defp maybe_prepend_param(params, %KeyValuePair{} = param), do: [param | params]
 
   defp maybe_add_param(params, _key, nil), do: params
 

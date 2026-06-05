@@ -801,6 +801,11 @@ defmodule Milvex do
     - `:partition_names` - List of partitions to query (default: all)
     - `:limit` - Maximum number of results
     - `:offset` - Number of results to skip
+    - `:order_by` - Order results by one or more scalar fields. Accepts a field
+      name (`:price`), a list of fields (`[:price, :rating]`, all ascending), or
+      an Ecto-style keyword list of directions (`[desc: :price, asc: :rating]`).
+      Field names may be atoms or strings. Query-only — not supported by
+      `search/4`, `hybrid_search/5`, `search_stream/4`, or `query_stream/4`.
     - `:consistency_level` - Consistency level (default: `:Bounded`)
     - `:expr_params` - Template parameters map for the filter expression
 
@@ -813,6 +818,12 @@ defmodule Milvex do
 
       {:ok, result} = Milvex.query(conn, "movies", "year > 2020",
         output_fields: ["id", "title", "year"],
+        limit: 100
+      )
+
+      {:ok, result} = Milvex.query(conn, "movies", "year > 2020",
+        output_fields: ["id", "title", "rating"],
+        order_by: [desc: :rating, asc: :title],
         limit: 100
       )
 

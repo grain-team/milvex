@@ -596,6 +596,36 @@ defmodule MilvexClientTest do
       assert %Milvex.QueryResult{} = result
     end
 
+    test "supports order_by with directions" do
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel, @config} end)
+
+      stub(RPC, :call, fn _channel, _stub, :query, request, _opts ->
+        order_param = Enum.find(request.query_params, &(&1.key == "order_by_fields"))
+
+        assert order_param.value == "price:desc,rating:asc"
+
+        {:ok,
+         %QueryResults{
+           status: %Status{code: 0},
+           fields_data: [],
+           collection_name: "test",
+           output_fields: []
+         }}
+      end)
+
+      assert {:ok, %Milvex.QueryResult{}} =
+               Milvex.query(:conn, "test", "id > 0", order_by: [desc: :price, asc: :rating])
+    end
+
+    test "rejects invalid order_by direction without calling RPC" do
+      reject(&Connection.get_channel/2)
+      reject(&RPC.call/5)
+
+      assert {:error, error} = Milvex.query(:conn, "test", "id > 0", order_by: [up: :price])
+      assert %Milvex.Errors.Invalid{} = error
+      assert error.field == :order_by
+    end
+
     test "rejects offset+limit > 16384 with a clear Invalid error" do
       reject(&Connection.get_channel/2)
       reject(&RPC.call/5)

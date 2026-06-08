@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.13.0](https://github.com/grain-team/milvex/compare/v0.12.0...v0.13.0) (2026-06-08)
+
+
+### Features
+
+* add Milvex.OrderBy for query ordering params ([a01752e](https://github.com/grain-team/milvex/commit/a01752e9e40d93fb9b54870f43ecd4e12d3f405c))
+* support :order_by option in Milvex.query/4 ([69cbd9b](https://github.com/grain-team/milvex/commit/69cbd9bda4549353d3f7361c12d3d3c1fe9d9c90))
+
 ## [0.12.0](https://github.com/grain-team/milvex/compare/v0.11.0...v0.12.0) (2026-05-04)
 
 

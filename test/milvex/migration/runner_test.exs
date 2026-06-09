@@ -284,6 +284,23 @@ defmodule Milvex.Migration.RunnerTest do
       assert report.counts.applied == 1
     end
 
+    test "manage_load=true but release-requiring op is skipped (allow_drop=false) -> no_release_needed" do
+      drop =
+        op(:drop_index, :destructive, %{field_name: "embedding", index_name: "embedding_idx"})
+
+      reject(&Milvex.get_load_state/3)
+      reject(&Milvex.release_collection/2)
+      reject(&Milvex.load_collection/2)
+      reject(&Milvex.drop_index/4)
+
+      report = Runner.apply([plan_with([drop])], ctx(manage_load: true, allow_drop: false))
+
+      [%PlanResult{load_status: :no_release_needed, op_results: [%OpResult{status: :skipped_no_flag}]}] =
+        report.plan_results
+
+      assert report.counts.skipped_destructive == 1
+    end
+
     test "manage_load=true + not loaded -> was_not_loaded" do
       drop =
         op(:drop_index, :destructive, %{field_name: "embedding", index_name: "embedding_idx"})

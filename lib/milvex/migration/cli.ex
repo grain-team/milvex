@@ -252,9 +252,18 @@ defmodule Milvex.Migration.CLI do
     cond do
       report.blocked_by_impossible -> 2
       report.counts.failed > 0 -> 4
+      load_failed?(report) -> 4
       not opts.allow_drop and report.counts.skipped_destructive > 0 -> 3
       true -> 0
     end
+  end
+
+  defp load_failed?(%ApplyReport{plan_results: plan_results}) do
+    Enum.any?(plan_results, fn
+      %{load_status: {:release_failed, _}} -> true
+      %{load_status: {:reload_failed, _}} -> true
+      _ -> false
+    end)
   end
 
   defp any_op?(plans, category) do

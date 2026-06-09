@@ -217,6 +217,19 @@ defmodule Milvex.Migration.CLITest do
       assert code == 1
       assert IO.iodata_to_binary(io) =~ "unknown module"
     end
+
+    test "unknown --module does not intern a new atom" do
+      cfg = config([])
+      name = "Definitely.Not.A.Real.Module.Xyzzy42"
+
+      {code, _io} = CLI.run(["--plan", "--module", name], cfg, &connect/1)
+
+      assert code == 1
+
+      assert_raise ArgumentError, fn ->
+        String.to_existing_atom("Elixir." <> name)
+      end
+    end
   end
 
   describe "connection" do
@@ -240,6 +253,66 @@ defmodule Milvex.Migration.CLITest do
 
       assert code == 1
       assert IO.iodata_to_binary(io) =~ "could not acquire connection"
+    end
+
+    test "unknown --connection -> exit 1 without interning a new atom" do
+      cfg = config(collections: [FakeCol])
+      name = "no_such_conn_xyzzy_42"
+
+      {code, io} = CLI.run(["--plan", "--connection", name], cfg, &connect/1)
+
+      assert code == 1
+      assert IO.iodata_to_binary(io) =~ "unknown connection"
+
+      assert_raise ArgumentError, fn -> String.to_existing_atom(name) end
+    end
+  end
+
+  describe "prefix resolver" do
+    test "MFA resolver returning a list is used" do
+      cfg = config(collections: [FakeCol], prefix_resolver: {List, :wrap, [["tenant_"]]})
+      stub_version()
+      stub_no_collection()
+
+      {code, _io} = CLI.run(["--plan"], cfg, &connect/1)
+
+      assert code == 0
+    end
+
+    test "non-MFA resolver -> exit 1" do
+      cfg = config(collections: [FakeCol], prefix_resolver: :not_a_tuple)
+
+      {code, io} = CLI.run(["--plan"], cfg, &connect/1)
+
+      assert code == 1
+      assert IO.iodata_to_binary(io) =~ "prefix_resolver"
+    end
+
+    test "resolver function not exported -> exit 1" do
+      cfg = config(collections: [FakeCol], prefix_resolver: {Milvex.Migration.CLI, :nope, []})
+
+      {code, io} = CLI.run(["--plan"], cfg, &connect/1)
+
+      assert code == 1
+      assert IO.iodata_to_binary(io) =~ "prefix_resolver"
+    end
+
+    test "resolver returning a non-list -> exit 1" do
+      cfg = config(collections: [FakeCol], prefix_resolver: {Atom, :to_string, [:foo]})
+
+      {code, io} = CLI.run(["--plan"], cfg, &connect/1)
+
+      assert code == 1
+      assert IO.iodata_to_binary(io) =~ "prefix_resolver"
+    end
+
+    test "resolver that raises -> exit 1" do
+      cfg = config(collections: [FakeCol], prefix_resolver: {Kernel, :hd, [[]]})
+
+      {code, io} = CLI.run(["--plan"], cfg, &connect/1)
+
+      assert code == 1
+      assert IO.iodata_to_binary(io) =~ "prefix_resolver"
     end
   end
 

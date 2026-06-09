@@ -40,5 +40,4 @@ defmodule Milvex.Milvus.Proto.Schema.FieldSchema do
   field :is_clustering_key, 14, type: :bool, json_name: "isClusteringKey"
   field :nullable, 15, type: :bool
   field :is_function_output, 16, type: :bool, json_name: "isFunctionOutput"
-  field :external_field, 17, type: :string, json_name: "externalField"
 end

@@ -220,12 +220,16 @@ defmodule Milvex.Migration.Runner do
          %Plan{operations: ops, collection_name: name},
          %Context{manage_load: true} = ctx
        ) do
-    if Enum.any?(ops, & &1.requires_release) do
+    if Enum.any?(ops, &(&1.requires_release and will_dispatch?(&1, ctx))) do
       release_if_loaded(ctx.conn, name)
     else
       {:ok, :no_release_needed}
     end
   end
+
+  defp will_dispatch?(%Operation{category: :destructive}, %Context{allow_drop: false}), do: false
+  defp will_dispatch?(%Operation{category: :descriptive}, _ctx), do: false
+  defp will_dispatch?(%Operation{}, _ctx), do: true
 
   defp release_if_loaded(conn, name) do
     case Milvex.get_load_state(conn, name, []) do

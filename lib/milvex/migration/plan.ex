@@ -230,8 +230,7 @@ defmodule Milvex.Migration.Plan do
 
   defp property_alter_ops(name, expected, live, ver) do
     max_length_ops(name, expected, live, ver) ++
-      nullable_ops(name, expected, live, ver) ++
-      default_ops(name, expected, live, ver)
+      nullable_ops(name, expected, live, ver)
   end
 
   defp max_length_ops(name, expected, live, ver) do
@@ -301,23 +300,6 @@ defmodule Milvex.Migration.Plan do
   end
 
   defp nullable_ops(_, _, _, _), do: []
-
-  defp default_ops(name, e, l, ver) when e.default_value != l.default_value do
-    [
-      Operation.build(
-        :alter_field,
-        :additive,
-        name,
-        %{
-          field_name: e.name,
-          changes: %{default_value: [l.default_value, e.default_value]}
-        },
-        ver
-      )
-    ]
-  end
-
-  defp default_ops(_, _, _, _), do: []
 
   defp index_ops(name, expected_indexes, live_indexes, ver) do
     expected = Map.new(expected_indexes, &{&1.field_name, &1})

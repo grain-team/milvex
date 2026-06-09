@@ -282,6 +282,23 @@ defmodule Milvex.Migration.ReporterTest do
       assert out =~ "skipped (destructive): 1"
       assert out =~ "skipped (idempotent):  0"
     end
+
+    test "renders tuple load_status (release failure) without crashing" do
+      plan_result = %Fake.PlanResult{
+        plan: build_plan([]),
+        load_status: {:release_failed, "release boom"},
+        op_results: []
+      }
+
+      report = %Fake.ApplyReport{
+        plan_results: [plan_result],
+        blocked_by_impossible: false,
+        counts: zero_counts()
+      }
+
+      out = IO.iodata_to_binary(Reporter.render(report, format: :text))
+      assert out =~ "load: release_failed: release boom"
+    end
   end
 
   describe "json rendering — apply report" do
@@ -390,6 +407,37 @@ defmodule Milvex.Migration.ReporterTest do
       [%{"results" => [result]}] = decoded["collections"]
       assert result["status"] == %{"error" => "boom"}
     end
+
+    test "serializes tuple load_status (reload failure) as a map" do
+      plan_result = %Fake.PlanResult{
+        plan: build_plan([]),
+        load_status: {:reload_failed, "reload boom"},
+        op_results: []
+      }
+
+      report = %Fake.ApplyReport{
+        plan_results: [plan_result],
+        blocked_by_impossible: false,
+        counts: zero_counts()
+      }
+
+      out = IO.iodata_to_binary(Reporter.render(report, format: :json))
+      decoded = Jason.decode!(out)
+
+      assert [%{"load_status" => load_status}] = decoded["collections"]
+      assert load_status == %{"status" => "reload_failed", "reason" => "reload boom"}
+    end
+  end
+
+  defp zero_counts do
+    %{
+      applied: 0,
+      skipped_destructive: 0,
+      skipped_idempotent: 0,
+      failed: 0,
+      blocked: 0,
+      impossible: 0
+    }
   end
 
   defp build_plan(ops, opts \\ []) do

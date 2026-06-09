@@ -421,6 +421,10 @@ defmodule Milvex.Milvus.Proto.Milvus.MilvusService.Service do
       Milvex.Milvus.Proto.Milvus.UpdateReplicateConfigurationRequest,
       Milvex.Milvus.Proto.Common.Status
 
+  rpc :GetReplicateConfiguration,
+      Milvex.Milvus.Proto.Milvus.GetReplicateConfigurationRequest,
+      Milvex.Milvus.Proto.Milvus.GetReplicateConfigurationResponse
+
   rpc :GetReplicateInfo,
       Milvex.Milvus.Proto.Milvus.GetReplicateInfoRequest,
       Milvex.Milvus.Proto.Milvus.GetReplicateInfoResponse
@@ -429,45 +433,9 @@ defmodule Milvex.Milvus.Proto.Milvus.MilvusService.Service do
       stream(Milvex.Milvus.Proto.Milvus.ReplicateRequest),
       stream(Milvex.Milvus.Proto.Milvus.ReplicateResponse)
 
-  rpc :ComputePhraseMatchSlop,
-      Milvex.Milvus.Proto.Milvus.ComputePhraseMatchSlopRequest,
-      Milvex.Milvus.Proto.Milvus.ComputePhraseMatchSlopResponse
-
-  rpc :CreateSnapshot,
-      Milvex.Milvus.Proto.Milvus.CreateSnapshotRequest,
-      Milvex.Milvus.Proto.Common.Status
-
-  rpc :DropSnapshot,
-      Milvex.Milvus.Proto.Milvus.DropSnapshotRequest,
-      Milvex.Milvus.Proto.Common.Status
-
-  rpc :ListSnapshots,
-      Milvex.Milvus.Proto.Milvus.ListSnapshotsRequest,
-      Milvex.Milvus.Proto.Milvus.ListSnapshotsResponse
-
-  rpc :DescribeSnapshot,
-      Milvex.Milvus.Proto.Milvus.DescribeSnapshotRequest,
-      Milvex.Milvus.Proto.Milvus.DescribeSnapshotResponse
-
-  rpc :RestoreSnapshot,
-      Milvex.Milvus.Proto.Milvus.RestoreSnapshotRequest,
-      Milvex.Milvus.Proto.Milvus.RestoreSnapshotResponse
-
-  rpc :GetRestoreSnapshotState,
-      Milvex.Milvus.Proto.Milvus.GetRestoreSnapshotStateRequest,
-      Milvex.Milvus.Proto.Milvus.GetRestoreSnapshotStateResponse
-
-  rpc :ListRestoreSnapshotJobs,
-      Milvex.Milvus.Proto.Milvus.ListRestoreSnapshotJobsRequest,
-      Milvex.Milvus.Proto.Milvus.ListRestoreSnapshotJobsResponse
-
-  rpc :AlterCollectionSchema,
-      Milvex.Milvus.Proto.Milvus.AlterCollectionSchemaRequest,
-      Milvex.Milvus.Proto.Milvus.AlterCollectionSchemaResponse
-
-  rpc :BatchUpdateManifest,
-      Milvex.Milvus.Proto.Milvus.BatchUpdateManifestRequest,
-      Milvex.Milvus.Proto.Common.Status
+  rpc :DumpMessages,
+      Milvex.Milvus.Proto.Milvus.DumpMessagesRequest,
+      stream(Milvex.Milvus.Proto.Milvus.DumpMessagesResponse)
 end
 
 defmodule Milvex.Milvus.Proto.Milvus.MilvusService.Stub do

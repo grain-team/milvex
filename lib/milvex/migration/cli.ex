@@ -140,23 +140,59 @@ defmodule Milvex.Migration.CLI do
 
   defp resolve_modules(%{modules: modules}, _fetch_config_fn) do
     Enum.reduce_while(modules, {:ok, []}, fn name, {:ok, acc} ->
-      module = Module.concat([name])
-
-      if Code.ensure_loaded?(module) do
-        {:cont, {:ok, acc ++ [module]}}
-      else
-        {:halt, {:error, {:unknown_module, name}}}
+      case safe_module(name) do
+        {:ok, module} -> {:cont, {:ok, acc ++ [module]}}
+        :error -> {:halt, {:error, {:unknown_module, name}}}
       end
     end)
+  end
+
+  defp safe_module(name) do
+    module = Module.safe_concat([name])
+    if Code.ensure_loaded?(module), do: {:ok, module}, else: :error
+  rescue
+    ArgumentError -> :error
   end
 
   defp resolve_prefixes(%{prefixes: []}, fetch_config_fn) do
     config = fetch_config_fn.(:milvex, :migrate) || []
 
     case Keyword.get(config, :prefix_resolver) do
-      nil -> {:ok, [nil]}
-      {m, f, a} -> {:ok, apply(m, f, a)}
+      nil ->
+        {:ok, [nil]}
+
+      {m, f, a} when is_atom(m) and is_atom(f) and is_list(a) ->
+        invoke_prefix_resolver(m, f, a)
+
+      other ->
+        {:error,
+         {:prefix_resolver_error,
+          "expected a {module, function, args} tuple, got: #{inspect(other)}"}}
     end
+  end
+
+  defp invoke_prefix_resolver(m, f, a) do
+    arity = length(a)
+
+    cond do
+      not Code.ensure_loaded?(m) ->
+        {:error, {:prefix_resolver_error, "#{inspect(m)} is not loaded"}}
+
+      not function_exported?(m, f, arity) ->
+        {:error, {:prefix_resolver_error, "#{inspect(m)}.#{f}/#{arity} is not exported"}}
+
+      true ->
+        case apply(m, f, a) do
+          result when is_list(result) ->
+            {:ok, result}
+
+          other ->
+            {:error,
+             {:prefix_resolver_error, "must return a list of prefixes, got: #{inspect(other)}"}}
+        end
+    end
+  rescue
+    e -> {:error, {:prefix_resolver_error, "raised #{inspect(e)}"}}
   end
 
   defp resolve_prefixes(%{prefixes: prefixes}, _fetch_config_fn), do: {:ok, prefixes}
@@ -167,7 +203,9 @@ defmodule Milvex.Migration.CLI do
   end
 
   defp connection_name(%{connection: name}, _fetch_config_fn) when is_binary(name) do
-    {:ok, String.to_atom(name)}
+    {:ok, String.to_existing_atom(name)}
+  rescue
+    ArgumentError -> {:error, {:unknown_connection, name}}
   end
 
   defp fetch_version(conn) do
@@ -319,6 +357,14 @@ defmodule Milvex.Migration.CLI do
 
   defp error_message({:unknown_module, name}) do
     ["unknown module: ", name, "\n", @usage, "\n"]
+  end
+
+  defp error_message({:unknown_connection, name}) do
+    ["unknown connection: ", name, " (no process registered under that name)\n", @usage, "\n"]
+  end
+
+  defp error_message({:prefix_resolver_error, detail}) do
+    ["invalid :prefix_resolver config — ", detail, "\n", @usage, "\n"]
   end
 
   defp error_message({:unknown_format, format}) do

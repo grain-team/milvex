@@ -41,12 +41,10 @@ defmodule Milvex.Migration.CLI do
     module: :keep,
     prefix: :keep,
     format: :string,
-    connection: :string,
-    verbose: :boolean,
-    quiet: :boolean
+    connection: :string
   ]
 
-  @flag_aliases [v: :verbose, q: :quiet]
+  @flag_aliases []
 
   @usage "Usage: mix milvex.migrate (--plan | --apply) [options]"
 
@@ -60,9 +58,7 @@ defmodule Milvex.Migration.CLI do
           modules: [String.t()],
           prefixes: [String.t()],
           format: :text | :json,
-          connection: String.t() | nil,
-          verbose: boolean(),
-          quiet: boolean()
+          connection: String.t() | nil
         }
 
   @spec run([String.t()], fetch_config_fn(), connect_fn()) :: {0..4, iodata()}
@@ -76,7 +72,6 @@ defmodule Milvex.Migration.CLI do
          {:ok, plans} <- compute_plans(cartesian(modules, prefixes), conn, version) do
       run_mode(opts, plans, conn)
     else
-      {:error, code, io} when is_integer(code) -> {code, io}
       {:error, reason} -> {1, error_message(reason)}
       {:error, tag, info} -> error_tuple_to_result(tag, info)
       {:error, tag, info1, info2} -> error_tuple_to_result(tag, info1, info2)
@@ -117,9 +112,7 @@ defmodule Milvex.Migration.CLI do
          modules: modules,
          prefixes: prefixes,
          format: format,
-         connection: Keyword.get(parsed, :connection),
-         verbose: Keyword.get(parsed, :verbose, false),
-         quiet: Keyword.get(parsed, :quiet, false)
+         connection: Keyword.get(parsed, :connection)
        }}
     end
   end
@@ -171,6 +164,8 @@ defmodule Milvex.Migration.CLI do
     end
   end
 
+  defp resolve_prefixes(%{prefixes: prefixes}, _fetch_config_fn), do: {:ok, prefixes}
+
   defp invoke_prefix_resolver(m, f, a) do
     arity = length(a)
 
@@ -194,8 +189,6 @@ defmodule Milvex.Migration.CLI do
   rescue
     e -> {:error, {:prefix_resolver_error, "raised #{inspect(e)}"}}
   end
-
-  defp resolve_prefixes(%{prefixes: prefixes}, _fetch_config_fn), do: {:ok, prefixes}
 
   defp connection_name(%{connection: nil}, fetch_config_fn) do
     config = fetch_config_fn.(:milvex, :migrate) || []
@@ -258,7 +251,7 @@ defmodule Milvex.Migration.CLI do
   end
 
   defp run_mode(%{mode: :plan} = opts, plans, _conn) do
-    io = Reporter.render(plans, format: opts.format, verbose: opts.verbose)
+    io = Reporter.render(plans, format: opts.format)
     {compute_plan_exit_code(plans, opts), io}
   end
 
@@ -271,7 +264,7 @@ defmodule Milvex.Migration.CLI do
     }
 
     report = Runner.apply(plans, ctx)
-    io = Reporter.render(report, format: opts.format, verbose: opts.verbose)
+    io = Reporter.render(report, format: opts.format)
     {compute_apply_exit_code(plans, report, opts), io}
   end
 

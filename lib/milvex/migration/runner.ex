@@ -362,15 +362,6 @@ defmodule Milvex.Migration.Runner do
     end
   end
 
-  defp dispatch(
-         %Operation{kind: :alter_index, payload: %{index_name: index_name, changes: changes}} = op,
-         _plan,
-         ctx
-       ) do
-    Milvex.alter_index(ctx.conn, op.collection_name, index_name, set: changes_to_kv(changes))
-    |> wrap_simple(op)
-  end
-
   defp dispatch(%Operation{kind: :add_function, payload: %{function: function}} = op, _plan, ctx) do
     Milvex.add_collection_function(ctx.conn, op.collection_name, function, [])
     |> wrap_simple(op)
@@ -394,16 +385,6 @@ defmodule Milvex.Migration.Runner do
     |> wrap_simple(op)
   end
 
-  defp dispatch(%Operation{kind: :alter_collection, payload: payload} = op, _plan, ctx) do
-    opts =
-      []
-      |> maybe_put(:set, Map.get(payload, :set))
-      |> maybe_put(:delete, Map.get(payload, :delete))
-
-    Milvex.alter_collection(ctx.conn, op.collection_name, opts)
-    |> wrap_simple(op)
-  end
-
   defp wrap_simple(:ok, op), do: %OpResult{operation: op, status: :ok}
   defp wrap_simple({:error, _} = err, op), do: error_result(op, err)
 
@@ -422,9 +403,6 @@ defmodule Milvex.Migration.Runner do
   defp changes_to_kv(changes) when is_map(changes) do
     Enum.map(changes, fn {key, [_old, new]} -> {key, new} end)
   end
-
-  defp maybe_put(opts, _key, nil), do: opts
-  defp maybe_put(opts, key, value), do: Keyword.put(opts, key, value)
 
   defp pre_2_6?(version) do
     Version.compare(MigrationVersion.coerce(version), MigrationVersion.drop_field_supported_at()) ==

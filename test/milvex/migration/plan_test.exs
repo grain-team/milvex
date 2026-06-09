@@ -546,6 +546,62 @@ defmodule Milvex.Migration.PlanTest do
     end
   end
 
+  describe "diff/4 - operation ordering" do
+    test "drop_index precedes drop_field when a field with an index is removed" do
+      live =
+        default_live_schema(
+          fields: default_live_fields() ++ [make_field(:legacy, :varchar, max_length: 64)]
+        )
+
+      live_indexes = [
+        hnsw_index_description(),
+        %IndexDescription{
+          index_name: "legacy_idx",
+          field_name: "legacy",
+          params: [
+            %KeyValuePair{key: "index_type", value: "INVERTED"},
+            %KeyValuePair{key: "metric_type", value: ""}
+          ]
+        }
+      ]
+
+      %Plan{operations: ops} =
+        Plan.diff(MoviesCol, nil, %{schema: live, indexes: live_indexes}, "2.6.1")
+
+      drop_index_pos =
+        Enum.find_index(ops, &(&1.kind == :drop_index and &1.payload.field_name == "legacy"))
+
+      drop_field_pos =
+        Enum.find_index(ops, &(&1.kind == :drop_field and &1.payload.field_name == "legacy"))
+
+      assert is_integer(drop_index_pos)
+      assert is_integer(drop_field_pos)
+      assert drop_index_pos < drop_field_pos
+    end
+
+    test "all additive operations precede all destructive operations" do
+      live =
+        default_live_schema(
+          fields: default_live_fields() ++ [make_field(:legacy, :varchar, max_length: 64)]
+        )
+
+      %Plan{operations: ops} =
+        Plan.diff(MoviesColWithDescription, nil, %{schema: live, indexes: []}, "2.6.1")
+
+      categories = Enum.map(ops, & &1.category)
+
+      assert :additive in categories
+      assert :destructive in categories
+
+      first_destructive = Enum.find_index(categories, &(&1 == :destructive))
+
+      last_additive =
+        length(categories) - 1 - Enum.find_index(Enum.reverse(categories), &(&1 == :additive))
+
+      assert last_additive < first_destructive
+    end
+  end
+
   describe "diff/4 - field property changes" do
     test "varchar max_length increase -> additive alter_field" do
       live = default_live_schema()

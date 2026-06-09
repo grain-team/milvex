@@ -80,14 +80,13 @@ defmodule Milvex.Migration.Plan do
 
         %{schema: %Schema{} = live_schema} = state ->
           live_indexes = Map.get(state, :indexes, [])
-          live_props = Map.get(state, :collection_props, [])
 
           field_ops(full_name, expected_schema, live_schema, milvus_version) ++
             function_ops(full_name, expected_schema, live_schema, milvus_version) ++
-            collection_kv_ops(full_name, expected_schema, live_props, milvus_version) ++
             index_ops(full_name, expected_indexes, live_indexes, milvus_version) ++
             description_ops(full_name, expected_schema, live_schema, milvus_version)
       end
+      |> order_operations()
 
     %__MODULE__{
       module: module,
@@ -96,6 +95,24 @@ defmodule Milvex.Migration.Plan do
       operations: operations,
       milvus_version: milvus_version
     }
+  end
+
+  @operation_order %{
+    create_collection: 0,
+    add_field: 1,
+    alter_field: 2,
+    add_function: 3,
+    alter_function: 4,
+    create_index: 5,
+    recreate_index: 6,
+    description_change: 7,
+    drop_index: 8,
+    drop_function: 9,
+    drop_field: 10
+  }
+
+  defp order_operations(operations) do
+    Enum.sort_by(operations, &Map.fetch!(@operation_order, &1.kind))
   end
 
   @doc """
@@ -540,8 +557,6 @@ defmodule Milvex.Migration.Plan do
 
   defp diff_put(map, _key, same, same), do: map
   defp diff_put(map, key, old, new), do: Map.put(map, key, [old, new])
-
-  defp collection_kv_ops(_, _, _, _), do: []
 
   defp description_ops(name, expected, live, ver) do
     live_index = Map.new(live.fields, &{&1.name, &1})

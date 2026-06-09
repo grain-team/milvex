@@ -203,7 +203,7 @@ defmodule Milvex.Migration.Reporter do
       Integer.to_string(counts.blocked),
       "\n",
       if(load_status,
-        do: ["  load: ", to_string(load_status), "\n"],
+        do: ["  load: ", format_load_status(load_status), "\n"],
         else: []
       ),
       Enum.map(op_results, fn op_result ->
@@ -314,7 +314,17 @@ defmodule Milvex.Migration.Reporter do
 
   defp load_status_to_json(nil), do: nil
   defp load_status_to_json(status) when is_atom(status), do: Atom.to_string(status)
+
+  defp load_status_to_json({tag, reason}),
+    do: %{status: Atom.to_string(tag), reason: reason_text(reason)}
+
   defp load_status_to_json(status), do: status
+
+  defp format_load_status({tag, reason}), do: [Atom.to_string(tag), ": ", reason_text(reason)]
+  defp format_load_status(status), do: to_string(status)
+
+  defp reason_text(reason) when is_binary(reason), do: reason
+  defp reason_text(reason), do: inspect(reason)
 
   defp op_result_to_json(op_result) do
     op = Map.fetch!(op_result, :operation)

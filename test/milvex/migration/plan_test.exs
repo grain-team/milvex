@@ -618,21 +618,27 @@ defmodule Milvex.Migration.PlanTest do
       assert String.contains?(alter.reason, "nullable")
     end
 
-    test "default_value change -> additive alter_field" do
+    test "default_value difference -> no alter_field (Milvus sets defaults at creation, not alterable)" do
       live = default_live_schema()
 
       %Plan{operations: ops} =
         Plan.diff(MoviesColTitleDefault, nil, %{schema: live, indexes: []}, "2.6.1")
 
-      alter =
-        Enum.find(ops, fn op ->
-          op.kind == :alter_field and
-            op.payload.field_name == "title" and
-            Map.has_key?(op.payload.changes, :default_value)
-        end)
+      refute Enum.any?(ops, fn op ->
+               op.kind == :alter_field and
+                 match?(%{changes: %{default_value: _}}, op.payload)
+             end)
+    end
 
-      assert alter.category == :additive
-      assert alter.payload.changes.default_value == [nil, "untitled"]
+    test "field with a DSL default does not perpetually diff against its proto round-trip" do
+      expected = Milvex.Collection.to_schema(MoviesColTitleDefault)
+
+      live = %Schema{
+        expected
+        | fields: Enum.map(expected.fields, &Field.from_proto(Field.to_proto(&1)))
+      }
+
+      assert Plan.field_diff(expected, live) == []
     end
   end
 

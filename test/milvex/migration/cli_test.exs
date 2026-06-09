@@ -119,6 +119,36 @@ defmodule Milvex.Migration.CLITest do
     stub(Milvex, :describe_index, fn _, _, _ -> {:ok, live_indexes} end)
   end
 
+  defp stub_live_collection_index_drift do
+    live_schema = %Schema{
+      name: "fake_movies",
+      fields: [
+        %Field{name: "id", data_type: :int64, is_primary_key: true, auto_id: true},
+        %Field{name: "title", data_type: :varchar, max_length: 256},
+        %Field{name: "embedding", data_type: :float_vector, dimension: 4}
+      ],
+      functions: []
+    }
+
+    stub(Milvex, :has_collection, fn _, _, _ -> {:ok, true} end)
+    stub(Milvex, :describe_collection, fn _, _, _ -> {:ok, %{schema: live_schema}} end)
+
+    live_indexes = [
+      %Milvex.Milvus.Proto.Milvus.IndexDescription{
+        field_name: "embedding",
+        index_name: "embedding_idx",
+        params: [
+          %Milvex.Milvus.Proto.Common.KeyValuePair{key: "index_type", value: "HNSW"},
+          %Milvex.Milvus.Proto.Common.KeyValuePair{key: "metric_type", value: "COSINE"},
+          %Milvex.Milvus.Proto.Common.KeyValuePair{key: "M", value: "8"},
+          %Milvex.Milvus.Proto.Common.KeyValuePair{key: "efConstruction", value: "256"}
+        ]
+      }
+    ]
+
+    stub(Milvex, :describe_index, fn _, _, _ -> {:ok, live_indexes} end)
+  end
+
   describe "argv parsing" do
     test "no mode -> exit 1 with 'specify --plan or --apply'" do
       cfg = config(collections: [FakeCol])
@@ -336,6 +366,22 @@ defmodule Milvex.Migration.CLITest do
       {code, _io} = CLI.run(["--apply"], cfg, &connect/1)
 
       assert code == 0
+    end
+
+    test "release failure under --manage-load -> exit 4" do
+      cfg = config(collections: [FakeCol])
+      stub_version()
+      stub_live_collection_index_drift()
+
+      stub(Milvex, :get_load_state, fn _, _, _ -> {:ok, :loaded} end)
+
+      stub(Milvex, :release_collection, fn _, _ ->
+        {:error, %Milvex.Errors.Grpc{message: "release failed"}}
+      end)
+
+      {code, _io} = CLI.run(["--apply", "--allow-drop", "--manage-load"], cfg, &connect/1)
+
+      assert code == 4
     end
 
     test "descriptive-only ops (no destructive) -> exit 0 (regression: was 3)" do

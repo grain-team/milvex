@@ -501,21 +501,6 @@ defmodule Milvex.Migration.RunnerTest do
       Runner.apply([plan_with([create])], ctx())
     end
 
-    test ":alter_index dispatch" do
-      alter =
-        op(:alter_index, :additive, %{
-          index_name: "embedding_idx",
-          changes: %{mmap_enabled: [false, true]}
-        })
-
-      expect(Milvex, :alter_index, fn _, _, "embedding_idx", opts ->
-        assert opts[:set] == [mmap_enabled: true]
-        :ok
-      end)
-
-      Runner.apply([plan_with([alter])], ctx())
-    end
-
     test ":recreate_index does drop + create using dsl_index" do
       idx = Index.hnsw("embedding", :cosine, m: 32, ef_construction: 256)
 
@@ -573,21 +558,6 @@ defmodule Milvex.Migration.RunnerTest do
       Runner.apply([plan_with([drop])], ctx(allow_drop: true))
     end
 
-    test ":alter_collection dispatch with set/delete" do
-      alter =
-        op(:alter_collection, :additive, %{
-          set: [ttl_seconds: 3600],
-          delete: [:foo]
-        })
-
-      expect(Milvex, :alter_collection, fn _, _, opts ->
-        assert opts[:set] == [ttl_seconds: 3600]
-        assert opts[:delete] == [:foo]
-        :ok
-      end)
-
-      Runner.apply([plan_with([alter])], ctx())
-    end
   end
 
   describe "apply/2 - end-to-end Plan->Runner" do

@@ -30,13 +30,11 @@ defmodule Milvex.Migration.Operation do
 
   @type kind ::
           :create_collection
-          | :alter_collection
           | :add_field
           | :alter_field
           | :drop_field
           | :description_change
           | :create_index
-          | :alter_index
           | :drop_index
           | :recreate_index
           | :add_function
@@ -115,13 +113,11 @@ defmodule Milvex.Migration.Operation do
   defp sigil(:impossible), do: "!"
 
   defp render_kind(:create_collection), do: "create collection"
-  defp render_kind(:alter_collection), do: "alter collection"
   defp render_kind(:add_field), do: "add field"
   defp render_kind(:alter_field), do: "alter field"
   defp render_kind(:drop_field), do: "drop field"
   defp render_kind(:description_change), do: "description"
   defp render_kind(:create_index), do: "create index"
-  defp render_kind(:alter_index), do: "alter index"
   defp render_kind(:drop_index), do: "drop index"
   defp render_kind(:recreate_index), do: "recreate index"
   defp render_kind(:add_function), do: "add function"
@@ -149,13 +145,6 @@ defmodule Milvex.Migration.Operation do
 
   defp render_target(%__MODULE__{kind: :create_index, payload: %{index: %Index{} = idx}}) do
     [idx.field_name, " ", to_string(idx.index_type)]
-  end
-
-  defp render_target(%__MODULE__{
-         kind: :alter_index,
-         payload: %{index_name: name, changes: ch}
-       }) do
-    [name, " ", inspect(ch)]
   end
 
   defp render_target(%__MODULE__{
@@ -189,10 +178,6 @@ defmodule Milvex.Migration.Operation do
 
   defp render_target(%__MODULE__{kind: :create_collection, payload: %{schema: %Schema{} = s}}) do
     [s.name]
-  end
-
-  defp render_target(%__MODULE__{kind: :alter_collection, collection_name: name, payload: p}) do
-    [name, " ", inspect(p)]
   end
 
   defp render_target(%__MODULE__{collection_name: name, payload: p}) do
@@ -250,10 +235,6 @@ defmodule Milvex.Migration.Operation do
     %{index: index_to_map(idx)}
   end
 
-  defp payload_to_map(:alter_index, %{index_name: name, changes: changes}) do
-    %{index_name: name, changes: changes}
-  end
-
   defp payload_to_map(:drop_index, payload) do
     Map.take(payload, [:field_name, :index_name])
   end
@@ -276,10 +257,6 @@ defmodule Milvex.Migration.Operation do
 
   defp payload_to_map(:create_collection, %{schema: %Schema{} = schema}) do
     %{schema: schema_to_map(schema)}
-  end
-
-  defp payload_to_map(:alter_collection, payload) when is_map(payload) do
-    payload
   end
 
   defp payload_to_map(_kind, payload) do

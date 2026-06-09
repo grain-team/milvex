@@ -61,8 +61,6 @@ defmodule Milvex.Migration.OperationTest do
         {:add_field, %{field: Field.new("x", :int64)}},
         {:alter_field, %{field_name: "x", changes: %{}}},
         {:create_index, %{index: Index.new("v", :hnsw, :cosine)}},
-        {:alter_index, %{index_name: "i", changes: %{}}},
-        {:alter_collection, %{description: "ok"}},
         {:add_function, %{function: Function.new("f", :BM25)}},
         {:alter_function, %{function_name: "f", changes: %{}}},
         {:create_collection, %{schema: %Schema{name: "x", fields: []}}}
@@ -130,8 +128,6 @@ defmodule Milvex.Migration.OperationTest do
             :add_field,
             :alter_field,
             :create_index,
-            :alter_index,
-            :alter_collection,
             :add_function,
             :alter_function,
             :create_collection,
@@ -226,24 +222,6 @@ defmodule Milvex.Migration.OperationTest do
       assert result.index.metric_type == :cosine
     end
 
-    test ":alter_index includes name + changes" do
-      op =
-        Operation.build(
-          :alter_index,
-          :additive,
-          "movies",
-          %{index_name: "emb_idx", changes: %{ef: [64, 128]}},
-          "2.6.1"
-        )
-
-      assert Operation.to_map(op) == %{
-               kind: :alter_index,
-               category: :additive,
-               index_name: "emb_idx",
-               changes: %{ef: [64, 128]}
-             }
-    end
-
     test ":drop_index includes field_name + index_name" do
       op =
         Operation.build(
@@ -334,17 +312,6 @@ defmodule Milvex.Migration.OperationTest do
       assert result.schema.name == "movies"
     end
 
-    test ":alter_collection passes payload as-is" do
-      payload = %{description: "new desc", properties: %{"mmap.enabled" => "true"}}
-      op = Operation.build(:alter_collection, :additive, "movies", payload, "2.6.1")
-
-      assert Operation.to_map(op) == %{
-               kind: :alter_collection,
-               category: :additive,
-               description: "new desc",
-               properties: %{"mmap.enabled" => "true"}
-             }
-    end
   end
 
   describe "to_line/1" do

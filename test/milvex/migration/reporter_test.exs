@@ -283,6 +283,37 @@ defmodule Milvex.Migration.ReporterTest do
       assert out =~ "skipped (idempotent):  0"
     end
 
+    test "blocked_impossible op is counted as blocked, not failed, in the per-collection line" do
+      plan =
+        build_plan([
+          Operation.build(
+            :add_field,
+            :impossible,
+            "movies",
+            %{field: Field.varchar("embedding_v2", 256)},
+            "2.6.1",
+            reason: "primary key fields cannot be added"
+          )
+        ])
+
+      [impossible_op] = plan.operations
+
+      plan_result = %Fake.PlanResult{
+        plan: plan,
+        load_status: :unmanaged,
+        op_results: [%Fake.OpResult{operation: impossible_op, status: :blocked_impossible}]
+      }
+
+      report = %Fake.ApplyReport{
+        plan_results: [plan_result],
+        blocked_by_impossible: true,
+        counts: %{zero_counts() | impossible: 1}
+      }
+
+      out = IO.iodata_to_binary(Reporter.render(report, format: :text))
+      assert out =~ "failed: 0, blocked: 1"
+    end
+
     test "renders tuple load_status (release failure) without crashing" do
       plan_result = %Fake.PlanResult{
         plan: build_plan([]),

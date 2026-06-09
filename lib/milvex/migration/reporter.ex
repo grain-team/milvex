@@ -13,19 +13,12 @@ defmodule Milvex.Migration.Reporter do
 
   ## Apply-report duck typing
 
-  This module ships ahead of `Milvex.Migration.Runner.ApplyReport` (Task 5).
-  Rather than hard-pattern-matching on a not-yet-defined struct, the apply-
-  report path matches structurally on `is_struct/1` plus the presence of
-  `:plan_results`. Once the Runner lands its struct will satisfy that shape
-  unchanged. Each `plan_result` is expected to carry `:plan`, `:op_results`,
-  and `:load_status`; each op-result is expected to carry `:operation` and
-  `:status`.
-
-  ## verbose option
-
-  The `verbose: bool` option is reserved for future use (e.g. dumping full
-  payload diffs). v1 emits the same output regardless. The flag is accepted
-  so the CLI can pass it through unchanged once verbose rendering lands.
+  The apply-report path matches structurally on `is_struct/1` plus the presence
+  of `:plan_results` rather than hard-matching
+  `Milvex.Migration.Runner.ApplyReport`, keeping this module decoupled from the
+  Runner's struct definition. Each `plan_result` is expected to carry `:plan`,
+  `:op_results`, and `:load_status`; each op-result is expected to carry
+  `:operation` and `:status`.
   """
 
   alias Milvex.Migration.Operation
@@ -34,20 +27,15 @@ defmodule Milvex.Migration.Reporter do
   @spec render([Plan.t()] | struct(), keyword()) :: iodata()
   def render(plans_or_report, opts \\ []) do
     format = Keyword.get(opts, :format, :text)
-    verbose = Keyword.get(opts, :verbose, false)
-    dispatch(plans_or_report, format, verbose)
+    dispatch(plans_or_report, format)
   end
 
-  defp dispatch(plans, :text, verbose) when is_list(plans), do: render_plans_text(plans, verbose)
-  defp dispatch(plans, :json, verbose) when is_list(plans), do: render_plans_json(plans, verbose)
+  defp dispatch(plans, :text) when is_list(plans), do: render_plans_text(plans)
+  defp dispatch(plans, :json) when is_list(plans), do: render_plans_json(plans)
+  defp dispatch(report, :text) when is_struct(report), do: render_report_text(report)
+  defp dispatch(report, :json) when is_struct(report), do: render_report_json(report)
 
-  defp dispatch(report, :text, verbose) when is_struct(report),
-    do: render_report_text(report, verbose)
-
-  defp dispatch(report, :json, verbose) when is_struct(report),
-    do: render_report_json(report, verbose)
-
-  defp render_plans_text(plans, _verbose) do
+  defp render_plans_text(plans) do
     [
       Enum.map(plans, &render_plan_text/1),
       render_plan_summary_text(plans)
@@ -138,7 +126,7 @@ defmodule Milvex.Migration.Reporter do
     end)
   end
 
-  defp render_plans_json(plans, _verbose) do
+  defp render_plans_json(plans) do
     counts = total_counts(plans)
 
     payload = %{
@@ -163,7 +151,7 @@ defmodule Milvex.Migration.Reporter do
     }
   end
 
-  defp render_report_text(report, _verbose) do
+  defp render_report_text(report) do
     plan_results = Map.get(report, :plan_results, [])
     blocked = Map.get(report, :blocked_by_impossible, false)
 
@@ -234,6 +222,7 @@ defmodule Milvex.Migration.Reporter do
   defp status_bucket(:skipped_no_flag), do: :skipped_destructive
   defp status_bucket(:skipped_idempotent), do: :skipped_idempotent
   defp status_bucket(:blocked_by_impossible), do: :blocked
+  defp status_bucket(:blocked_impossible), do: :blocked
   defp status_bucket({:error, _}), do: :failed
   defp status_bucket(_), do: :failed
 
@@ -277,7 +266,7 @@ defmodule Milvex.Migration.Reporter do
     ]
   end
 
-  defp render_report_json(report, _verbose) do
+  defp render_report_json(report) do
     plan_results = Map.get(report, :plan_results, [])
     counts = Map.get(report, :counts, %{})
 

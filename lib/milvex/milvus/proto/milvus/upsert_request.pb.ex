@@ -16,4 +16,9 @@ defmodule Milvex.Milvus.Proto.Milvus.UpsertRequest do
   field :schema_timestamp, 8, type: :uint64, json_name: "schemaTimestamp"
   field :partial_update, 9, type: :bool, json_name: "partialUpdate"
   field :namespace, 10, proto3_optional: true, type: :string
+
+  field :field_ops, 11,
+    repeated: true,
+    type: Milvex.Milvus.Proto.Schema.FieldPartialUpdateOp,
+    json_name: "fieldOps"
 end

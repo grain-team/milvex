@@ -295,7 +295,12 @@ defmodule Milvex.Migration.RunnerTest do
 
       report = Runner.apply([plan_with([drop])], ctx(manage_load: true, allow_drop: false))
 
-      [%PlanResult{load_status: :no_release_needed, op_results: [%OpResult{status: :skipped_no_flag}]}] =
+      [
+        %PlanResult{
+          load_status: :no_release_needed,
+          op_results: [%OpResult{status: :skipped_no_flag}]
+        }
+      ] =
         report.plan_results
 
       assert report.counts.skipped_destructive == 1
@@ -574,7 +579,6 @@ defmodule Milvex.Migration.RunnerTest do
 
       Runner.apply([plan_with([drop])], ctx(allow_drop: true))
     end
-
   end
 
   describe "apply/2 - end-to-end Plan->Runner" do

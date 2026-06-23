@@ -462,9 +462,9 @@ defmodule Milvex.Migration.Plan do
       key = if is_atom(k), do: k, else: safe_atom(k)
 
       cond do
+        is_nil(key) -> acc
         key in @structural_int_param_keys -> Map.put(acc, key, to_integer(v))
-        is_atom(key) -> Map.put(acc, key, v)
-        true -> acc
+        true -> Map.put(acc, key, v)
       end
     end)
   end

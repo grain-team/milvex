@@ -24,6 +24,12 @@ defmodule Milvex.Migration.Reporter do
   alias Milvex.Migration.Operation
   alias Milvex.Migration.Plan
 
+  @doc """
+  Renders the given plans or apply-report as iodata.
+
+  Pass `format: :text` (default) or `format: :json` via `opts` to select the
+  output format.
+  """
   @spec render([Plan.t()] | struct(), keyword()) :: iodata()
   def render(plans_or_report, opts \\ []) do
     format = Keyword.get(opts, :format, :text)

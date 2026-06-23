@@ -311,7 +311,6 @@ defmodule Milvex.Migration.OperationTest do
       assert result.kind == :create_collection
       assert result.schema.name == "movies"
     end
-
   end
 
   describe "to_line/1" do

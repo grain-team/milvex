@@ -2,8 +2,6 @@ defmodule Milvex do
   @external_resource "README.md"
   @moduledoc File.read!("README.md")
 
-  require Logger
-
   alias Milvex.AnnSearch
   alias Milvex.Config
   alias Milvex.Connection

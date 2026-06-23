@@ -372,8 +372,6 @@ defmodule Milvex.Data do
     end
   end
 
-  defp validate_row_consistency([]), do: :ok
-
   defp validate_row_consistency([first | rest]) do
     first_keys = first |> Map.keys() |> Enum.sort()
 
@@ -388,8 +386,6 @@ defmodule Milvex.Data do
          invalid_error(:rows, "row at index #{idx + 1} has different fields than the first row")}
     end
   end
-
-  defp validate_required_fields_present([], _required_fields), do: :ok
 
   defp validate_required_fields_present([first | _], required_fields) do
     row_keys =

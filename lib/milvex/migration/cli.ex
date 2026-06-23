@@ -61,6 +61,13 @@ defmodule Milvex.Migration.CLI do
           connection: String.t() | nil
         }
 
+  @doc """
+  Parses `argv`, resolves the target modules/prefixes and connection, computes
+  migration plans, and runs them in either `--plan` or `--apply` mode.
+
+  Returns `{exit_code, output}` where `output` is iodata ready to write to
+  stdout. `fetch_config_fn` and `connect_fn` are injectable for testing.
+  """
   @spec run([String.t()], fetch_config_fn(), connect_fn()) :: {0..4, iodata()}
   def run(argv, fetch_config_fn \\ &Application.get_env/2, connect_fn \\ &default_connect/1) do
     with {:ok, opts} <- parse_argv(argv),

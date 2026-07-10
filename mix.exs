@@ -13,7 +13,8 @@ defmodule Milvex.MixProject do
       start_permanent: Mix.env() == :prod,
       dialyzer: [
         plt_core_path: "_plts/core",
-        plt_add_apps: [:mix]
+        plt_add_apps: [:mix],
+        ignore_warnings: ".dialyzer_ignore.exs"
       ],
       preferred_cli_env: [
         coveralls: :test,
@@ -117,7 +118,8 @@ defmodule Milvex.MixProject do
       {:excoveralls, "~> 0.18", only: [:dev, :test]},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:gen_state_machine, "~> 3.0"},
-      {:grpc, "~> 0.11"},
+      {:grpc, "~> 1.0"},
+      {:gun, "~> 2.4", optional: true},
       {:jason, "~> 1.4"},
       {:mimic, "~> 2.2", only: :test},
       {:mint, "~> 1.7", optional: true},
@@ -128,7 +130,7 @@ defmodule Milvex.MixProject do
       {:spark, "~> 2.3"},
       {:splode, "~> 0.2"},
       {:telemetry, "~> 1.0"},
-      {:testcontainers, "~> 1.13", only: [:test, :dev]},
+      {:testcontainers, "~> 2.0", only: :test},
       {:tidewave, "~> 0.5", only: :dev, runtime: false},
       {:zoi, "~> 0.11"}
     ]

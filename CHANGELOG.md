@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.14.0](https://github.com/grain-team/milvex/compare/v0.13.0...v0.14.0) (2026-07-10)
+
+
+### Features
+
+* Refactor Milvus Migration ([340e7d8](https://github.com/grain-team/milvex/commit/340e7d886fbc6211bd6adfb9a1cbc6a3c62f551b))
+
+
+### Bug Fixes
+
+* harden migration CLI atom creation, prefix_resolver dispatch, and version coercion ([9ba8907](https://github.com/grain-team/milvex/commit/9ba8907173a5fd7b693b07f1fdd8b55661e8897f))
+* migration reporter crash, load-failure exit code, and default_value perpetual diff ([c2d744c](https://github.com/grain-team/milvex/commit/c2d744c776d8c33e6c2b39caf87af8d963cd503d))
+* only release collection under --manage-load when a release-requiring op will run ([977a69e](https://github.com/grain-team/milvex/commit/977a69ec9578eefae836337cd325dc0555d0aca5))
+* order migration ops by dependency; drop dead alter_collection/alter_index plumbing ([ee011e7](https://github.com/grain-team/milvex/commit/ee011e71ec3241274acaec5a7132a7e60119cf11))
+* Updates GRPC and fix dev_children ([5ac928e](https://github.com/grain-team/milvex/commit/5ac928e4eddde86096a0b45d0852ad9e2810cb94))
+
 ## [0.13.0](https://github.com/grain-team/milvex/compare/v0.12.0...v0.13.0) (2026-06-08)
 
 

@@ -46,6 +46,11 @@ defmodule Milvex.RPC do
   - `request` - The request struct
   - `opts` - Options to pass to the gRPC call (e.g., `[timeout: 10_000]`)
 
+  Each attempt is guarded by a client-side deadline of twice the `:timeout`
+  value (default 10s), so a dead connection the adapter cannot detect (e.g.
+  Mint, which has no client-side timeout) fails with a retriable timeout
+  error instead of hanging forever.
+
   ## Returns
 
   - `{:ok, response}` on success
@@ -90,7 +95,7 @@ defmodule Milvex.RPC do
 
   defp do_call(channel, stub_module, method, request, opts, metadata) do
     Telemetry.rpc_span(metadata, fn ->
-      case apply(stub_module, method, [channel, request, opts]) do
+      case call_with_deadline(channel, stub_module, method, request, opts) do
         {:ok, response} ->
           status_code = extract_status_code(response)
           {{:ok, response}, Map.put(metadata, :status_code, status_code)}
@@ -244,6 +249,29 @@ defmodule Milvex.RPC do
 
   def with_status_check(response, _operation) when is_map(response) do
     {:ok, response}
+  end
+
+  # The Mint adapter has no client-side timeout: the :timeout opt only becomes
+  # a grpc-timeout header enforced by the server, so a black-holed connection
+  # would hang the caller forever. Enforce a local deadline of twice the RPC
+  # timeout plus a margin, so adapters with their own timeout (Gun) win first.
+  @default_grpc_timeout 10_000
+  @deadline_margin 1_000
+
+  defp call_with_deadline(channel, stub_module, method, request, opts) do
+    case Keyword.get(opts, :timeout, @default_grpc_timeout) do
+      timeout when is_integer(timeout) and timeout > 0 ->
+        task = Task.async(fn -> apply(stub_module, method, [channel, request, opts]) end)
+
+        case Task.yield(task, timeout * 2 + @deadline_margin) || Task.shutdown(task, :brutal_kill) do
+          {:ok, result} -> result
+          {:exit, reason} -> {:error, reason}
+          nil -> {:error, :timeout}
+        end
+
+      _no_deadline ->
+        apply(stub_module, method, [channel, request, opts])
+    end
   end
 
   defp connection_error(reason) do

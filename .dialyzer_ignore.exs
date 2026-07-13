@@ -6,7 +6,7 @@
   # code.
   {"lib/milvex/connection.ex", :pattern_match, {145, 7}},
   {"lib/milvex/connection.ex", :pattern_match, {168, 7}},
-  {"lib/milvex/connection.ex", :pattern_match, {273, 7}},
-  {"lib/milvex/connection.ex", :pattern_match, {314, 13}},
-  {"lib/milvex/connection.ex", :unused_fun, {329, 8}}
+  {"lib/milvex/connection.ex", :pattern_match, {281, 7}},
+  {"lib/milvex/connection.ex", :pattern_match, {322, 13}},
+  {"lib/milvex/connection.ex", :unused_fun, {337, 8}}
 ]

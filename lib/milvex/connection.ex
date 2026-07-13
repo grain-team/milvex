@@ -210,14 +210,22 @@ defmodule Milvex.Connection do
     {:next_state, :reconnecting, %{data | channel: nil, conn_monitor_ref: nil, retry_count: 0}}
   end
 
-  def connected(:info, {:elixir_grpc, :connection_down, _pid}, data) do
+  def connected(
+        :info,
+        {:elixir_grpc, :connection_down, pid},
+        %{channel: %{adapter_payload: %{conn_pid: pid}}} = data
+      ) do
     Telemetry.connection_disconnect(data.config.host, data.config.port, :connection_down)
     demonitor_connection(data.conn_monitor_ref)
     close_channel(data.channel)
     {:next_state, :reconnecting, %{data | channel: nil, conn_monitor_ref: nil, retry_count: 0}}
   end
 
-  def connected(:info, {:gun_down, _pid, _protocol, reason, _killed_streams}, data) do
+  def connected(
+        :info,
+        {:gun_down, pid, _protocol, reason, _killed_streams},
+        %{channel: %{adapter_payload: %{conn_pid: pid}}} = data
+      ) do
     Telemetry.connection_disconnect(data.config.host, data.config.port, reason)
     demonitor_connection(data.conn_monitor_ref)
     close_channel(data.channel)

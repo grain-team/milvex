@@ -5,6 +5,14 @@ defmodule Milvex.RPCTest do
   alias Milvex.Milvus.Proto.Common.Status
   alias Milvex.RPC
 
+  defmodule HangingStub do
+    def hang(_channel, _request, _opts), do: Process.sleep(:infinity)
+  end
+
+  defmodule EchoStub do
+    def echo(_channel, request, _opts), do: {:ok, request}
+  end
+
   describe "check_status/2" do
     test "returns :ok for success status (code 0)" do
       status = %Status{code: 0, reason: "", detail: ""}
@@ -122,6 +130,25 @@ defmodule Milvex.RPCTest do
 
     test "Mint error with non-retriable reason" do
       refute RPC.retriable_error?(%Mint.TransportError{reason: :protocol_not_negotiated})
+    end
+  end
+
+  describe "call/5 client-side deadline" do
+    test "returns retriable timeout error when the adapter never responds" do
+      channel_fn = fn -> {:ok, %GRPC.Channel{host: "localhost", port: 19_530}, %{}} end
+
+      assert {:error, %Milvex.Errors.Connection{reason: :timeout, retriable: true}} =
+               RPC.call(channel_fn, HangingStub, :hang, %{},
+                 timeout: 10,
+                 retry_max_attempts: 0
+               )
+    end
+
+    test "returns the result when the call completes within the deadline" do
+      channel_fn = fn -> {:ok, %GRPC.Channel{host: "localhost", port: 19_530}, %{}} end
+
+      assert {:ok, %{value: 42}} =
+               RPC.call(channel_fn, EchoStub, :echo, %{value: 42}, timeout: 1_000)
     end
   end
 

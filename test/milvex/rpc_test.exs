@@ -99,7 +99,17 @@ defmodule Milvex.RPCTest do
 
   describe "retriable_error?/1" do
     test "retriable atom reasons" do
-      for reason <- [:timeout, :closed, :econnrefused, :econnreset, :ehostunreach, :enetunreach] do
+      reasons = [
+        :timeout,
+        :closed,
+        :econnrefused,
+        :econnreset,
+        :ehostunreach,
+        :enetunreach,
+        :too_many_concurrent_requests
+      ]
+
+      for reason <- reasons do
         assert RPC.retriable_error?(reason), "expected #{reason} to be retriable"
       end
     end
@@ -110,6 +120,13 @@ defmodule Milvex.RPCTest do
 
     test "Mint HTTPError with retriable reason" do
       assert RPC.retriable_error?(%Mint.HTTPError{reason: :timeout, module: Mint.HTTP2})
+    end
+
+    test "Mint HTTPError with too_many_concurrent_requests is retriable" do
+      assert RPC.retriable_error?(%Mint.HTTPError{
+               reason: :too_many_concurrent_requests,
+               module: Mint.HTTP2
+             })
     end
 
     test "Mint connection closed string" do

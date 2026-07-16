@@ -253,7 +253,15 @@ defmodule Milvex.RPC do
     )
   end
 
-  @retriable_reasons [:timeout, :closed, :econnrefused, :econnreset, :ehostunreach, :enetunreach]
+  @retriable_reasons [
+    :timeout,
+    :closed,
+    :econnrefused,
+    :econnreset,
+    :ehostunreach,
+    :enetunreach,
+    :too_many_concurrent_requests
+  ]
 
   @doc false
   @spec retriable_error?(term()) :: boolean()

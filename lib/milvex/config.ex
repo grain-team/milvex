@@ -100,6 +100,17 @@ defmodule Milvex.Config do
                        |> Zoi.max(60_000)
                        |> Zoi.optional()
                        |> Zoi.default(15_000),
+                     pool_size:
+                       Zoi.integer(
+                         description:
+                           "Number of gRPC connections to pool. RPCs are distributed " <>
+                             "round-robin across connections, multiplying the effective " <>
+                             "concurrent-stream budget imposed by HTTP/2 servers"
+                       )
+                       |> Zoi.min(1)
+                       |> Zoi.max(128)
+                       |> Zoi.optional()
+                       |> Zoi.default(1),
                      adapter:
                        Zoi.any(description: "GRPC client adapter module")
                        |> Zoi.optional()

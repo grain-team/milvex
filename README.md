@@ -138,7 +138,8 @@ Milvex.Connection.start_link(
   token: "api_token",       # API token (alternative to user/password)
   ssl: true,                # Enable SSL/TLS
   ssl_options: [],          # SSL options for transport
-  timeout: 30_000           # Connection timeout in ms
+  timeout: 30_000,          # Connection timeout in ms
+  pool_size: 1              # Number of gRPC connections (round-robin)
 )
 
 # Or use a URI

@@ -41,6 +41,21 @@ defmodule Milvex.Connection do
   - `:reconnect_max_delay` - Maximum delay cap in ms (default: 60000)
   - `:reconnect_multiplier` - Exponential multiplier (default: 2.0)
   - `:reconnect_jitter` - Jitter factor 0.0-1.0 (default: 0.1)
+
+  ## Connection Pooling
+
+  HTTP/2 multiplexes all RPCs over a single connection, and servers cap the
+  number of concurrent streams per connection (`SETTINGS_MAX_CONCURRENT_STREAMS`).
+  Strict clients such as the Mint adapter reject requests over that limit with
+  `:too_many_concurrent_requests`. Set `:pool_size` to open multiple
+  connections and distribute RPCs round-robin across them:
+
+      {:ok, pool} = Milvex.Connection.start_link(host: "localhost", pool_size: 4)
+
+  The pool answers the same call protocol as a single connection, so the
+  returned pid (or registered name) can be passed anywhere a connection is
+  expected. With `pool_size: 1` (the default) a single connection is started
+  and behavior is unchanged. See `Milvex.ConnectionPool` for details.
   """
 
   use GenStateMachine, callback_mode: [:state_functions, :state_enter]
@@ -69,19 +84,32 @@ defmodule Milvex.Connection do
   ## Options
 
   - `:name` - Optional name to register the connection process
+  - `:pool_size` - When greater than 1, starts a `Milvex.ConnectionPool`
+    of that many connections instead of a single connection
   - All other options are passed to `Milvex.Config.parse/1`
 
   ## Examples
 
       {:ok, conn} = Milvex.Connection.start_link(host: "localhost", port: 19530)
       {:ok, conn} = Milvex.Connection.start_link([host: "localhost"], name: :milvus)
+      {:ok, pool} = Milvex.Connection.start_link(host: "localhost", pool_size: 4)
   """
   @spec start_link(keyword()) :: GenStateMachine.on_start()
   def start_link(opts) do
-    {name, config_opts} = Keyword.pop(opts, :name)
+    if Keyword.get(opts, :pool_size, 1) > 1 do
+      Milvex.ConnectionPool.start_link(opts)
+    else
+      {name, config_opts} = Keyword.pop(opts, :name)
 
-    gen_opts = if name, do: [name: name], else: []
-    GenStateMachine.start_link(__MODULE__, config_opts, gen_opts)
+      gen_opts = if name, do: [name: name], else: []
+      GenStateMachine.start_link(__MODULE__, config_opts, gen_opts)
+    end
+  end
+
+  @doc false
+  @spec start_worker(keyword()) :: GenStateMachine.on_start()
+  def start_worker(config_opts) do
+    GenStateMachine.start_link(__MODULE__, config_opts, [])
   end
 
   @doc """

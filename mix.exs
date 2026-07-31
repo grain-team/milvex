@@ -13,8 +13,7 @@ defmodule Milvex.MixProject do
       start_permanent: Mix.env() == :prod,
       dialyzer: [
         plt_core_path: "_plts/core",
-        plt_add_apps: [:mix],
-        ignore_warnings: ".dialyzer_ignore.exs"
+        plt_add_apps: [:mix]
       ],
       preferred_cli_env: [
         coveralls: :test,

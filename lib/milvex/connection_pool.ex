@@ -86,7 +86,7 @@ defmodule Milvex.ConnectionPool do
   running.
   """
   @spec get_channel(GenServer.server(), keyword()) ::
-          {:ok, GRPC.Channel.t(), Config.t()} | {:error, Milvex.Error.t()}
+          {:ok, %GRPC.Channel{}, Config.t()} | {:error, Milvex.Error.t()}
   def get_channel(pool, _opts \\ []) do
     case lookup(pool) do
       {:ok, entry} -> pick_channel(entry)
@@ -126,7 +126,7 @@ defmodule Milvex.ConnectionPool do
 
   @doc false
   @spec pick_channel(entry()) ::
-          {:ok, GRPC.Channel.t(), Config.t()} | {:error, Milvex.Error.t()}
+          {:ok, %GRPC.Channel{}, Config.t()} | {:error, Milvex.Error.t()}
   def pick_channel(%{table: table, counter: counter, size: size, config: config}) do
     start = :atomics.add_get(counter, 1, 1)
 

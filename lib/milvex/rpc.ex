@@ -40,7 +40,7 @@ defmodule Milvex.RPC do
 
   ## Parameters
 
-  - `channel_fn` - `(-> {:ok, GRPC.Channel.t(), Config.t()} | {:error, term()})`
+  - `channel_fn` - `(-> {:ok, %GRPC.Channel{}, Config.t()} | {:error, term()})`
   - `stub_module` - The generated gRPC stub module (e.g., `MilvusService.Stub`)
   - `method` - The RPC method name as an atom (e.g., `:show_collections`)
   - `request` - The request struct
@@ -65,7 +65,7 @@ defmodule Milvex.RPC do
   @grpc_keys [:timeout, :metadata, :content_type, :compressor]
 
   @spec call(
-          (-> {:ok, GRPC.Channel.t(), map()} | {:error, term()}),
+          (-> {:ok, %GRPC.Channel{}, map()} | {:error, term()}),
           module(),
           atom(),
           struct(),

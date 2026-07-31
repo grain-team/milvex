@@ -72,7 +72,7 @@ defmodule Milvex.Connection do
 
   @type t :: %__MODULE__{
           config: Config.t(),
-          channel: GRPC.Channel.t() | nil,
+          channel: %GRPC.Channel{} | nil,
           conn_monitor_ref: reference() | nil,
           registry: {:ets.tid(), pos_integer()} | nil,
           retry_count: non_neg_integer()
@@ -121,7 +121,7 @@ defmodule Milvex.Connection do
   The `config` map contains the full `Milvex.Config.t()` used by this connection.
   """
   @spec get_channel(GenServer.server(), keyword()) ::
-          {:ok, GRPC.Channel.t(), Config.t()} | {:error, Milvex.Error.t()}
+          {:ok, %GRPC.Channel{}, Config.t()} | {:error, Milvex.Error.t()}
   def get_channel(conn, opts \\ []) do
     case ConnectionPool.lookup(conn) do
       {:ok, entry} ->

@@ -9,8 +9,8 @@ defmodule Milvex.ConnectionPool do
   `:too_many_concurrent_requests`. Pooling multiplies the effective
   concurrent-stream budget by the pool size.
 
-  The pool answers the same call protocol as `Milvex.Connection`, so a pool
-  pid or registered name can be used anywhere a connection is expected:
+  A pool pid or registered name can be used anywhere a connection is
+  expected:
 
       {:ok, pool} = Milvex.ConnectionPool.start_link(host: "localhost", pool_size: 4)
       {:ok, channel, config} = Milvex.Connection.get_channel(pool)
@@ -20,6 +20,12 @@ defmodule Milvex.ConnectionPool do
   `:pool_size` option greater than 1, which delegates here.
 
   ## Behavior
+
+  Channel lookup never goes through the pool process. Each pooled connection
+  publishes its channel to a shared ETS table when it connects and removes it
+  when it disconnects. Callers pick a channel round-robin in their own
+  process using an `:atomics` counter, so `get_channel/2` is lock-free and
+  the pool process is never a bottleneck.
 
   - `get_channel/2` picks connections round-robin. If the picked connection
     is not currently connected, the remaining connections are tried before
@@ -37,12 +43,19 @@ defmodule Milvex.ConnectionPool do
   alias Milvex.Connection
   alias Milvex.Errors
 
-  defstruct [:supervisor, :config, next: 0]
+  defstruct [:supervisor, :entry]
+
+  @typedoc "Lock-free pool entry published via `:persistent_term`."
+  @type entry :: %{
+          table: :ets.tid(),
+          counter: :atomics.atomics_ref(),
+          size: pos_integer(),
+          config: Config.t()
+        }
 
   @type t :: %__MODULE__{
           supervisor: pid() | nil,
-          config: Config.t(),
-          next: non_neg_integer()
+          entry: entry()
         }
 
   @doc """
@@ -65,23 +78,31 @@ defmodule Milvex.ConnectionPool do
   @doc """
   Gets a gRPC channel from the pool, round-robin.
 
+  Lock-free: reads the pool's shared channel table directly from the caller
+  process without going through the pool process.
+
   Returns `{:ok, channel, config}` if any pooled connection is connected,
-  or `{:error, error}` otherwise.
+  or `{:error, error}` otherwise. Exits with `:noproc` if the pool is not
+  running.
   """
   @spec get_channel(GenServer.server(), keyword()) ::
           {:ok, GRPC.Channel.t(), Config.t()} | {:error, Milvex.Error.t()}
-  def get_channel(pool, opts \\ []) do
-    timeout = Keyword.get(opts, :timeout, 5_000)
-    GenServer.call(pool, :get_channel, timeout)
+  def get_channel(pool, _opts \\ []) do
+    case lookup(pool) do
+      {:ok, entry} -> pick_channel(entry)
+      :error -> exit({:noproc, {__MODULE__, :get_channel, [pool]}})
+    end
   end
 
   @doc """
   Checks if at least one pooled connection is established.
   """
   @spec connected?(GenServer.server(), keyword()) :: boolean()
-  def connected?(pool, opts \\ []) do
-    timeout = Keyword.get(opts, :timeout, 5_000)
-    GenServer.call(pool, :connected?, timeout)
+  def connected?(pool, _opts \\ []) do
+    case lookup(pool) do
+      {:ok, entry} -> any_connected?(entry)
+      :error -> false
+    end
   end
 
   @doc """
@@ -92,24 +113,76 @@ defmodule Milvex.ConnectionPool do
     GenServer.stop(pool, :normal)
   end
 
+  @doc false
+  @spec lookup(GenServer.server()) :: {:ok, entry()} | :error
+  def lookup(pool) do
+    with pid when is_pid(pid) <- GenServer.whereis(pool),
+         %{} = entry <- :persistent_term.get({__MODULE__, pid}, nil) do
+      {:ok, entry}
+    else
+      _ -> :error
+    end
+  end
+
+  @doc false
+  @spec pick_channel(entry()) ::
+          {:ok, GRPC.Channel.t(), Config.t()} | {:error, Milvex.Error.t()}
+  def pick_channel(%{table: table, counter: counter, size: size, config: config}) do
+    start = :atomics.add_get(counter, 1, 1)
+
+    Enum.find_value(0..(size - 1), not_connected_error(config), fn offset ->
+      index = rem(start + offset, size) + 1
+      live_channel(table, index, config)
+    end)
+  rescue
+    ArgumentError -> not_connected_error(config)
+  end
+
+  defp live_channel(table, index, config) do
+    case :ets.lookup(table, index) do
+      [{^index, worker, channel}] ->
+        if Process.alive?(worker), do: {:ok, channel, config}
+
+      [] ->
+        nil
+    end
+  end
+
+  @doc false
+  @spec any_connected?(entry()) :: boolean()
+  def any_connected?(%{table: table}) do
+    table
+    |> :ets.tab2list()
+    |> Enum.any?(fn {_index, worker, _channel} -> Process.alive?(worker) end)
+  rescue
+    ArgumentError -> false
+  end
+
   @impl true
   def init(config_opts) do
     case Config.parse(config_opts) do
       {:ok, config} ->
         Process.flag(:trap_exit, true)
 
+        table = :ets.new(__MODULE__, [:set, :public, read_concurrency: true])
+        counter = :atomics.new(1, [])
+        entry = %{table: table, counter: counter, size: config.pool_size, config: config}
+
         children =
           for index <- 1..config.pool_size do
+            worker_opts = Keyword.put(config_opts, :registry, {table, index})
+
             %{
               id: {Connection, index},
-              start: {Connection, :start_worker, [config_opts]},
+              start: {Connection, :start_worker, [worker_opts]},
               type: :worker
             }
           end
 
         case Supervisor.start_link(children, strategy: :one_for_one) do
           {:ok, supervisor} ->
-            {:ok, %__MODULE__{supervisor: supervisor, config: config}}
+            :persistent_term.put({__MODULE__, self()}, entry)
+            {:ok, %__MODULE__{supervisor: supervisor, entry: entry}}
 
           {:error, reason} ->
             {:stop, reason}
@@ -120,30 +193,14 @@ defmodule Milvex.ConnectionPool do
     end
   end
 
+  # Kept for compatibility with callers using the raw call protocol.
   @impl true
   def handle_call(:get_channel, _from, data) do
-    case workers(data) do
-      [] ->
-        {:reply, not_connected_error(data), data}
-
-      workers ->
-        {:reply, pick_channel(workers, data), %{data | next: data.next + 1}}
-    end
+    {:reply, pick_channel(data.entry), data}
   end
 
   def handle_call(:connected?, _from, data) do
-    connected? =
-      data
-      |> workers()
-      |> Enum.any?(fn worker ->
-        try do
-          Connection.connected?(worker)
-        catch
-          :exit, _ -> false
-        end
-      end)
-
-    {:reply, connected?, data}
+    {:reply, any_connected?(data.entry), data}
   end
 
   @impl true
@@ -156,9 +213,13 @@ defmodule Milvex.ConnectionPool do
   end
 
   @impl true
-  def terminate(_reason, %{supervisor: supervisor}) when is_pid(supervisor) do
-    if Process.alive?(supervisor) do
-      Supervisor.stop(supervisor)
+  def terminate(_reason, data) do
+    :persistent_term.erase({__MODULE__, self()})
+
+    with %{supervisor: supervisor} when is_pid(supervisor) <- data do
+      if Process.alive?(supervisor) do
+        Supervisor.stop(supervisor)
+      end
     end
 
     :ok
@@ -166,41 +227,12 @@ defmodule Milvex.ConnectionPool do
     :exit, _ -> :ok
   end
 
-  def terminate(_reason, _data), do: :ok
-
-  defp workers(data) do
-    data.supervisor
-    |> Supervisor.which_children()
-    |> Enum.sort_by(fn {id, _pid, _type, _modules} -> id end)
-    |> Enum.flat_map(fn
-      {_id, pid, _type, _modules} when is_pid(pid) -> [pid]
-      _child -> []
-    end)
-  end
-
-  defp pick_channel(workers, data) do
-    {front, back} = Enum.split(workers, rem(data.next, length(workers)))
-
-    Enum.find_value(back ++ front, not_connected_error(data), fn worker ->
-      case fetch_channel(worker) do
-        {:ok, _channel, _config} = ok -> ok
-        {:error, _error} -> nil
-      end
-    end)
-  end
-
-  defp fetch_channel(worker) do
-    Connection.get_channel(worker)
-  catch
-    :exit, _ -> {:error, :worker_down}
-  end
-
-  defp not_connected_error(data) do
+  defp not_connected_error(config) do
     {:error,
      Errors.Connection.exception(
        reason: :not_connected,
-       host: data.config.host,
-       port: data.config.port,
+       host: config.host,
+       port: config.port,
        retriable: true
      )}
   end

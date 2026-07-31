@@ -46,6 +46,11 @@ defmodule Milvex.AlterTest do
 
   setup :verify_on_exit!
 
+  setup do
+    stub(Connection, :get_config, fn _conn, _opts -> {:ok, @config} end)
+    :ok
+  end
+
   defp stub_channel do
     stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel, @config} end)
   end
@@ -503,13 +508,13 @@ defmodule Milvex.AlterTest do
 
   describe "channel resolution failures" do
     test "alter_collection returns connection error" do
-      stub(Connection, :get_channel, fn _conn, _opts -> {:error, :not_connected} end)
+      stub(Connection, :get_config, fn _conn, _opts -> {:error, :not_connected} end)
 
       assert {:error, :not_connected} = Milvex.alter_collection(:fake_conn, "movies")
     end
 
     test "get_version returns connection error" do
-      stub(Connection, :get_channel, fn _conn, _opts -> {:error, :not_connected} end)
+      stub(Connection, :get_config, fn _conn, _opts -> {:error, :not_connected} end)
 
       assert {:error, :not_connected} = Milvex.get_version(:fake_conn)
     end

@@ -64,15 +64,17 @@ defmodule Milvex.Connection do
 
   alias Milvex.Backoff
   alias Milvex.Config
+  alias Milvex.ConnectionPool
   alias Milvex.Errors
   alias Milvex.Telemetry
 
-  defstruct [:config, :channel, :conn_monitor_ref, retry_count: 0]
+  defstruct [:config, :channel, :conn_monitor_ref, :registry, retry_count: 0]
 
   @type t :: %__MODULE__{
           config: Config.t(),
           channel: GRPC.Channel.t() | nil,
           conn_monitor_ref: reference() | nil,
+          registry: {:ets.tid(), pos_integer()} | nil,
           retry_count: non_neg_integer()
         }
 
@@ -121,8 +123,34 @@ defmodule Milvex.Connection do
   @spec get_channel(GenServer.server(), keyword()) ::
           {:ok, GRPC.Channel.t(), Config.t()} | {:error, Milvex.Error.t()}
   def get_channel(conn, opts \\ []) do
-    timeout = Keyword.get(opts, :timeout, 5_000)
-    GenStateMachine.call(conn, :get_channel, timeout)
+    case ConnectionPool.lookup(conn) do
+      {:ok, entry} ->
+        ConnectionPool.pick_channel(entry)
+
+      :error ->
+        timeout = Keyword.get(opts, :timeout, 5_000)
+        GenStateMachine.call(conn, :get_channel, timeout)
+    end
+  end
+
+  @doc """
+  Gets the connection config without picking a channel.
+
+  The config is static after startup, so unlike `get_channel/2` this does not
+  consume a round-robin slot on pooled connections and succeeds even while
+  the connection is (re)connecting.
+  """
+  @spec get_config(GenServer.server(), keyword()) ::
+          {:ok, Config.t()} | {:error, Milvex.Error.t()}
+  def get_config(conn, opts \\ []) do
+    case ConnectionPool.lookup(conn) do
+      {:ok, %{config: config}} ->
+        {:ok, config}
+
+      :error ->
+        timeout = Keyword.get(opts, :timeout, 5_000)
+        GenStateMachine.call(conn, :get_config, timeout)
+    end
   end
 
   @doc """
@@ -138,18 +166,27 @@ defmodule Milvex.Connection do
   """
   @spec connected?(GenServer.server(), keyword()) :: boolean()
   def connected?(conn, opts \\ []) do
-    timeout = Keyword.get(opts, :timeout, 5_000)
-    GenStateMachine.call(conn, :connected?, timeout)
+    case ConnectionPool.lookup(conn) do
+      {:ok, entry} ->
+        ConnectionPool.any_connected?(entry)
+
+      :error ->
+        timeout = Keyword.get(opts, :timeout, 5_000)
+        GenStateMachine.call(conn, :connected?, timeout)
+    end
   end
 
   @impl true
   def init(config_opts) do
+    {registry, config_opts} = Keyword.pop(config_opts, :registry)
+
     case Config.parse(config_opts) do
       {:ok, config} ->
         data = %__MODULE__{
           config: config,
           channel: nil,
           conn_monitor_ref: nil,
+          registry: registry,
           retry_count: 0
         }
 
@@ -162,7 +199,8 @@ defmodule Milvex.Connection do
 
   # --- :connecting state ---
 
-  def connecting(:enter, _old_state, _data) do
+  def connecting(:enter, _old_state, data) do
+    unpublish_channel(data)
     {:keep_state_and_data, [{:state_timeout, 0, :connect}]}
   end
 
@@ -215,13 +253,18 @@ defmodule Milvex.Connection do
     {:keep_state_and_data, [{:reply, from, false}]}
   end
 
+  def connecting({:call, from}, :get_config, data) do
+    {:keep_state_and_data, [{:reply, from, {:ok, data.config}}]}
+  end
+
   def connecting(:info, _msg, _data) do
     :keep_state_and_data
   end
 
   # --- :connected state ---
 
-  def connected(:enter, _old_state, _data) do
+  def connected(:enter, _old_state, data) do
+    publish_channel(data)
     :keep_state_and_data
   end
 
@@ -231,6 +274,10 @@ defmodule Milvex.Connection do
 
   def connected({:call, from}, :connected?, _data) do
     {:keep_state_and_data, [{:reply, from, true}]}
+  end
+
+  def connected({:call, from}, :get_config, data) do
+    {:keep_state_and_data, [{:reply, from, {:ok, data.config}}]}
   end
 
   def connected(:info, {:DOWN, ref, :process, _pid, reason}, %{conn_monitor_ref: ref} = data) do
@@ -258,7 +305,8 @@ defmodule Milvex.Connection do
 
   # --- :reconnecting state ---
 
-  def reconnecting(:enter, _old_state, _data) do
+  def reconnecting(:enter, _old_state, data) do
+    unpublish_channel(data)
     {:keep_state_and_data, [{:state_timeout, 0, :reconnect}]}
   end
 
@@ -274,6 +322,10 @@ defmodule Milvex.Connection do
     {:keep_state_and_data, [{:reply, from, false}]}
   end
 
+  def reconnecting({:call, from}, :get_config, data) do
+    {:keep_state_and_data, [{:reply, from, {:ok, data.config}}]}
+  end
+
   def reconnecting(:info, _msg, _data) do
     :keep_state_and_data
   end
@@ -282,6 +334,8 @@ defmodule Milvex.Connection do
 
   @impl true
   def terminate(_reason, _state, data) do
+    unpublish_channel(data)
+
     if data.channel do
       close_channel(data.channel)
     end
@@ -292,6 +346,27 @@ defmodule Milvex.Connection do
   end
 
   # --- Private helpers ---
+
+  # Pooled workers publish their channel to the pool's shared ETS table so
+  # callers can pick channels without going through any process.
+  defp publish_channel(%{registry: nil}), do: :ok
+
+  defp publish_channel(%{registry: {table, index}, channel: channel}) do
+    :ets.insert(table, {index, self(), channel})
+    :ok
+  rescue
+    # Table owner (the pool) is shutting down.
+    ArgumentError -> :ok
+  end
+
+  defp unpublish_channel(%{registry: nil}), do: :ok
+
+  defp unpublish_channel(%{registry: {table, index}}) do
+    :ets.delete(table, index)
+    :ok
+  rescue
+    ArgumentError -> :ok
+  end
 
   defp reconnect(data) do
     delay = calculate_backoff_delay(data)

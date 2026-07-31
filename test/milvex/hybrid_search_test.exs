@@ -54,6 +54,11 @@ defmodule Milvex.HybridSearchTest do
 
   setup :verify_on_exit!
 
+  setup do
+    stub(Connection, :get_config, fn _conn, _opts -> {:ok, @config} end)
+    :ok
+  end
+
   describe "hybrid_search/5 validation" do
     test "returns {:error, _} when searches is empty" do
       {:ok, ranker} = Ranker.rrf()
@@ -77,7 +82,7 @@ defmodule Milvex.HybridSearchTest do
       {:ok, search2} = AnnSearch.new("field2", [[0.3, 0.4]], limit: 10)
       {:ok, ranker} = Ranker.weighted([0.7, 0.3])
 
-      stub(Connection, :get_channel, fn _, _ -> {:error, :not_connected} end)
+      stub(Connection, :get_config, fn _, _ -> {:error, :not_connected} end)
 
       assert {:error, _} = Milvex.hybrid_search(:conn, "collection", [search1, search2], ranker)
     end
@@ -87,7 +92,7 @@ defmodule Milvex.HybridSearchTest do
       {:ok, search2} = AnnSearch.new("field2", [[0.3, 0.4]], limit: 10)
       {:ok, ranker} = Ranker.rrf()
 
-      stub(Connection, :get_channel, fn _, _ -> {:error, :not_connected} end)
+      stub(Connection, :get_config, fn _, _ -> {:error, :not_connected} end)
 
       assert {:error, _} = Milvex.hybrid_search(:conn, "collection", [search1, search2], ranker)
     end
@@ -97,7 +102,7 @@ defmodule Milvex.HybridSearchTest do
       {:ok, search2} = AnnSearch.new("field2", [[0.3, 0.4]], limit: 10)
       {:ok, ranker} = Ranker.decay(:gauss, field: "timestamp", origin: 1_000_000, scale: 3600)
 
-      stub(Connection, :get_channel, fn _, _ -> {:error, :not_connected} end)
+      stub(Connection, :get_config, fn _, _ -> {:error, :not_connected} end)
 
       assert {:error, _} = Milvex.hybrid_search(:conn, "collection", [search1, search2], ranker)
     end

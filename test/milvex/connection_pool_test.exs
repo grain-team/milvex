@@ -28,6 +28,27 @@ defmodule Milvex.ConnectionPoolTest do
       assert first_cycle == second_cycle
     end
 
+    test "config fetches do not consume round-robin slots" do
+      stub_successful_connect()
+
+      {:ok, pool} = ConnectionPool.start_link(host: "localhost", pool_size: 2)
+
+      eventually(fn ->
+        pids = for _ <- 1..2, do: channel_pid!(pool)
+        assert pids |> Enum.uniq() |> length() == 2
+      end)
+
+      # Interleaving a config fetch with every channel pick (the pattern used
+      # by Milvex.resolve_channel/2) must still rotate over all connections.
+      pids =
+        for _ <- 1..4 do
+          assert {:ok, %{pool_size: 2}} = Connection.get_config(pool)
+          channel_pid!(pool)
+        end
+
+      assert pids |> Enum.uniq() |> length() == 2
+    end
+
     test "returns retriable not_connected error when no connection is up" do
       stub(GRPC.Stub, :connect, fn _address, _opts -> {:error, :econnrefused} end)
 

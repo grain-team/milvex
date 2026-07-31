@@ -11,6 +11,11 @@ defmodule Milvex.ExprParamsIntegrationTest do
 
   setup :verify_on_exit!
 
+  setup do
+    stub(Connection, :get_config, fn _conn, _opts -> {:ok, Milvex.Config.defaults()} end)
+    :ok
+  end
+
   describe "query/4 with expr_params" do
     test "populates expr_template_values on QueryRequest" do
       params = %{"min_year" => 2020, "genres" => ["action", "sci-fi"]}

@@ -441,8 +441,8 @@ defmodule Milvex.Iterator do
   defp format_pk(pk), do: to_string(pk)
 
   defp resolve_channel!(conn, opts) do
-    case Connection.get_channel(conn, opts) do
-      {:ok, _channel, config} ->
+    case Connection.get_config(conn, opts) do
+      {:ok, config} ->
         channel_fn = fn -> Connection.get_channel(conn, opts) end
         {:ok, channel_fn, Config.merge_rpc_opts(config, opts)}
 

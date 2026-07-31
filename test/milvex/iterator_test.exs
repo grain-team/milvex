@@ -49,6 +49,11 @@ defmodule Milvex.IteratorTest do
 
   setup :verify_on_exit!
 
+  setup do
+    stub(Connection, :get_config, fn _conn, _opts -> {:ok, @config} end)
+    :ok
+  end
+
   defp fake_search_response(ids, opts \\ []) do
     token = Keyword.get(opts, :token, "tok-#{:erlang.unique_integer([:positive])}")
     last_bound = Keyword.get(opts, :last_bound, 0.5)

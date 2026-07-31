@@ -52,6 +52,11 @@ defmodule Milvex.SearchTest do
 
   setup :verify_on_exit!
 
+  setup do
+    stub(Connection, :get_config, fn _conn, _opts -> {:ok, @config} end)
+    :ok
+  end
+
   describe "search/4 with highlight option" do
     test "includes highlighter in SearchRequest when highlight option is provided" do
       {:ok, highlighter} = Highlighter.lexical("text_field")

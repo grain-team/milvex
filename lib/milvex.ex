@@ -1975,8 +1975,12 @@ defmodule Milvex do
   # ============================================================================
 
   defp resolve_channel(conn, opts) do
-    case Connection.get_channel(conn, opts) do
-      {:ok, _channel, config} ->
+    # Fetch config without picking a channel: on pooled connections a
+    # channel pick consumes a round-robin slot, and fetching one just for
+    # config would skew the rotation. The channel itself is picked fresh
+    # by `channel_fn` on each RPC attempt.
+    case Connection.get_config(conn, opts) do
+      {:ok, config} ->
         channel_fn = fn -> Connection.get_channel(conn, opts) end
         {:ok, channel_fn, Config.merge_rpc_opts(config, opts)}
 

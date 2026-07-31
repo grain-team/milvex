@@ -50,6 +50,11 @@ defmodule MilvexClientTest do
 
   setup :verify_on_exit!
 
+  setup do
+    stub(Connection, :get_config, fn _conn, _opts -> {:ok, @config} end)
+    :ok
+  end
+
   describe "has_collection/3" do
     test "returns true when collection exists" do
       stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel, @config} end)
@@ -72,7 +77,7 @@ defmodule MilvexClientTest do
     end
 
     test "returns error when connection fails" do
-      stub(Connection, :get_channel, fn _conn, _opts ->
+      stub(Connection, :get_config, fn _conn, _opts ->
         {:error, Milvex.Errors.Connection.exception(reason: :not_connected)}
       end)
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.1](https://github.com/grain-team/milvex/compare/v0.14.0...v0.14.1) (2026-08-10)
+
+
+### Bug Fixes
+
+* Fixed pool performance ([c21e630](https://github.com/grain-team/milvex/commit/c21e6309bdeffa10c67f31e7e74e1b08c8902327))
+
 ## [0.14.0](https://github.com/grain-team/milvex/compare/v0.13.0...v0.14.0) (2026-07-10)
 
 

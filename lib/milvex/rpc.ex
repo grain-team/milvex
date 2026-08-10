@@ -65,7 +65,7 @@ defmodule Milvex.RPC do
   @grpc_keys [:timeout, :metadata, :content_type, :compressor]
 
   @spec call(
-          (-> {:ok, %GRPC.Channel{}, map()} | {:error, term()}),
+          (-> {:ok, Milvex.Connection.channel(), map()} | {:error, term()}),
           module(),
           atom(),
           struct(),

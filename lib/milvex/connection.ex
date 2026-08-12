@@ -36,6 +36,14 @@ defmodule Milvex.Connection do
   connection dies, it automatically reconnects using exponential backoff
   with jitter to prevent thundering herd problems.
 
+  With the Gun adapter (grpc >= 1.0), the channel's `conn_pid` is an
+  adapter-owned wrapper GenServer that stays alive even when the underlying
+  gun connection dies. To detect real connection loss, the actual gun process
+  is resolved and monitored as well, and HTTP/2 keepalive pings are enabled by
+  default (`keepalive: 30_000`, `keepalive_tolerance: 2`) so idle connections
+  silently dropped by load balancers or NAT are detected within ~90s. Both can
+  be overridden via `:adapter_opts` (`http2_opts`).
+
   Configuration options:
   - `:reconnect_base_delay` - Base delay in ms (default: 1000)
   - `:reconnect_max_delay` - Maximum delay cap in ms (default: 60000)
@@ -52,12 +60,14 @@ defmodule Milvex.Connection do
   alias Milvex.Errors
   alias Milvex.Telemetry
 
-  defstruct [:config, :channel, :conn_monitor_ref, retry_count: 0]
+  defstruct [:config, :channel, monitors: %{}, retry_count: 0]
+
+  @type monitor_kind :: :wrapper | :gun
 
   @type t :: %__MODULE__{
           config: Config.t(),
           channel: GRPC.Channel.t() | nil,
-          conn_monitor_ref: reference() | nil,
+          monitors: %{reference() => {monitor_kind(), pid()}},
           retry_count: non_neg_integer()
         }
 
@@ -121,7 +131,7 @@ defmodule Milvex.Connection do
         data = %__MODULE__{
           config: config,
           channel: nil,
-          conn_monitor_ref: nil,
+          monitors: %{},
           retry_count: 0
         }
 
@@ -142,11 +152,10 @@ defmodule Milvex.Connection do
     Telemetry.connection_reconnect(data.config.host, data.config.port, data.retry_count, 0)
 
     case establish_connection(data.config) do
-      {:ok, channel, monitor_ref} ->
+      {:ok, channel, monitors} ->
         Telemetry.connection_connect(data.config.host, data.config.port)
 
-        {:next_state, :connected,
-         %{data | channel: channel, conn_monitor_ref: monitor_ref, retry_count: 0}}
+        {:next_state, :connected, %{data | channel: channel, monitors: monitors, retry_count: 0}}
 
       {:error, reason} ->
         delay = calculate_backoff_delay(data)
@@ -165,11 +174,10 @@ defmodule Milvex.Connection do
     Telemetry.connection_reconnect(data.config.host, data.config.port, data.retry_count, delay)
 
     case establish_connection(data.config) do
-      {:ok, channel, monitor_ref} ->
+      {:ok, channel, monitors} ->
         Telemetry.connection_connect(data.config.host, data.config.port)
 
-        {:next_state, :connected,
-         %{data | channel: channel, conn_monitor_ref: monitor_ref, retry_count: 0}}
+        {:next_state, :connected, %{data | channel: channel, monitors: monitors, retry_count: 0}}
 
       {:error, reason} ->
         Logger.warning("Connection retry failed: #{inspect(reason)}, retrying in #{delay}ms...")
@@ -205,23 +213,23 @@ defmodule Milvex.Connection do
     {:keep_state_and_data, [{:reply, from, true}]}
   end
 
-  def connected(:info, {:DOWN, ref, :process, _pid, reason}, %{conn_monitor_ref: ref} = data) do
+  def connected(:info, {:DOWN, ref, :process, _pid, reason}, %{monitors: monitors} = data)
+      when is_map_key(monitors, ref) do
     Telemetry.connection_disconnect(data.config.host, data.config.port, reason)
-    {:next_state, :reconnecting, %{data | channel: nil, conn_monitor_ref: nil, retry_count: 0}}
+    teardown_connection(%{data | monitors: Map.delete(monitors, ref)})
+    {:next_state, :reconnecting, %{data | channel: nil, monitors: %{}, retry_count: 0}}
   end
 
   def connected(:info, {:elixir_grpc, :connection_down, _pid}, data) do
     Telemetry.connection_disconnect(data.config.host, data.config.port, :connection_down)
-    demonitor_connection(data.conn_monitor_ref)
-    close_channel(data.channel)
-    {:next_state, :reconnecting, %{data | channel: nil, conn_monitor_ref: nil, retry_count: 0}}
+    teardown_connection(data)
+    {:next_state, :reconnecting, %{data | channel: nil, monitors: %{}, retry_count: 0}}
   end
 
   def connected(:info, {:gun_down, _pid, _protocol, reason, _killed_streams}, data) do
     Telemetry.connection_disconnect(data.config.host, data.config.port, reason)
-    demonitor_connection(data.conn_monitor_ref)
-    close_channel(data.channel)
-    {:next_state, :reconnecting, %{data | channel: nil, conn_monitor_ref: nil, retry_count: 0}}
+    teardown_connection(data)
+    {:next_state, :reconnecting, %{data | channel: nil, monitors: %{}, retry_count: 0}}
   end
 
   def connected(:info, _msg, _data) do
@@ -255,10 +263,10 @@ defmodule Milvex.Connection do
   @impl true
   def terminate(_reason, _state, data) do
     if data.channel do
-      close_channel(data.channel)
+      teardown_connection(data)
+    else
+      demonitor_all(data.monitors)
     end
-
-    demonitor_connection(data.conn_monitor_ref)
 
     :ok
   end
@@ -270,11 +278,10 @@ defmodule Milvex.Connection do
     Telemetry.connection_reconnect(data.config.host, data.config.port, data.retry_count, delay)
 
     case establish_connection(data.config) do
-      {:ok, channel, monitor_ref} ->
+      {:ok, channel, monitors} ->
         Telemetry.connection_connect(data.config.host, data.config.port)
 
-        {:next_state, :connected,
-         %{data | channel: channel, conn_monitor_ref: monitor_ref, retry_count: 0}}
+        {:next_state, :connected, %{data | channel: channel, monitors: monitors, retry_count: 0}}
 
       {:error, reason} ->
         Logger.warning("Reconnection failed: #{inspect(reason)}, retrying in #{delay}ms...")
@@ -312,8 +319,8 @@ defmodule Milvex.Connection do
 
     case GRPC.Stub.connect(address, opts) do
       {:ok, channel} ->
-        monitor_ref = monitor_connection(channel)
-        {:ok, channel, monitor_ref}
+        monitors = monitor_connection(channel)
+        {:ok, channel, monitors}
 
       {:error, reason} ->
         {:error,
@@ -326,16 +333,57 @@ defmodule Milvex.Connection do
     end
   end
 
+  # In grpc >= 1.0 the Gun adapter's `conn_pid` is a ConnectionProcess wrapper
+  # GenServer that neither links nor monitors the underlying gun process. When
+  # gun dies (we set `retry: 0`), the wrapper stays alive as a zombie, so we
+  # must also resolve and monitor the real gun pid to detect connection loss.
   defp monitor_connection(%{adapter_payload: %{conn_pid: conn_pid}}) when is_pid(conn_pid) do
-    Process.monitor(conn_pid)
+    monitors = %{Process.monitor(conn_pid) => {:wrapper, conn_pid}}
+
+    case resolve_gun_pid(conn_pid) do
+      {:ok, gun_pid} -> Map.put(monitors, Process.monitor(gun_pid), {:gun, gun_pid})
+      :error -> monitors
+    end
   end
 
-  defp monitor_connection(_channel), do: nil
+  defp monitor_connection(_channel), do: %{}
 
-  defp demonitor_connection(nil), do: :ok
+  defp resolve_gun_pid(conn_pid) do
+    case :sys.get_state(conn_pid, 5_000) do
+      %{gun_pid: gun_pid} when is_pid(gun_pid) -> {:ok, gun_pid}
+      _ -> :error
+    end
+  catch
+    _kind, _reason -> :error
+  end
 
-  defp demonitor_connection(ref) do
-    Process.demonitor(ref, [:flush])
+  defp demonitor_all(monitors) do
+    Enum.each(monitors, fn {ref, _entry} -> Process.demonitor(ref, [:flush]) end)
+  end
+
+  # Tears down whatever is left of a connection: demonitors remaining refs,
+  # closes the channel (which stops a zombie wrapper if the gun process died),
+  # and shuts down a gun process orphaned by a dead wrapper.
+  defp teardown_connection(data) do
+    demonitor_all(data.monitors)
+    close_channel(data.channel)
+
+    Enum.each(data.monitors, fn
+      {_ref, {:gun, gun_pid}} -> shutdown_gun(gun_pid)
+      {_ref, _entry} -> :ok
+    end)
+
+    :ok
+  end
+
+  # :gun is an optional dependency; call dynamically to avoid compile-time
+  # warnings for users of other adapters.
+  defp shutdown_gun(gun_pid) do
+    if Process.alive?(gun_pid) and Code.ensure_loaded?(:gun) do
+      apply(:gun, :shutdown, [gun_pid])
+    end
+
+    :ok
   end
 
   defp build_connection_opts(config) do
@@ -382,9 +430,20 @@ defmodule Milvex.Connection do
 
   defp maybe_add_adapter(opts, _config), do: opts
 
+  # Disable gun's own reconnect (Milvex owns reconnection) and enable HTTP/2
+  # keepalive pings so idle connections silently killed by LBs/NAT are
+  # detected (gun defaults keepalive to :infinity). With keepalive_tolerance,
+  # unacked pings close the connection, which kills gun (retry: 0) and
+  # triggers our gun-pid monitor.
+  @default_http2_opts %{keepalive: 30_000, keepalive_tolerance: 2}
+
   defp maybe_add_adapter_opts(opts, %{adapter: GRPC.Client.Adapters.Gun} = config) do
-    adapter_opts = Map.get(config, :adapter_opts, [])
-    adapter_opts = Keyword.put_new(adapter_opts, :retry, 0)
+    adapter_opts =
+      config
+      |> Map.get(:adapter_opts, [])
+      |> Keyword.put_new(:retry, 0)
+      |> Keyword.update(:http2_opts, @default_http2_opts, &Map.merge(@default_http2_opts, &1))
+
     Keyword.put(opts, :adapter_opts, adapter_opts)
   end
 

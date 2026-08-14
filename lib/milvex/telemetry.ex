@@ -86,6 +86,16 @@ defmodule Milvex.Telemetry do
       * `:retry_count` - Number of retries so far
       * `:delay_ms` - Backoff delay before this attempt
 
+  ### `[:milvex, :connection, :recycle]`
+
+  Emitted when a channel is proactively recycled (make-before-break) after its
+  `channel_max_age` lifetime elapses.
+
+    * Measurements: `%{}`
+    * Metadata:
+      * `:host` - The Milvus host
+      * `:port` - The Milvus port
+
   ## Data Encoding Events
 
   Emitted via `:telemetry.span/3` from `Milvex.Data`.
@@ -245,6 +255,14 @@ defmodule Milvex.Telemetry do
       port: port,
       retry_count: retry_count,
       delay_ms: delay_ms
+    })
+  end
+
+  @doc false
+  def connection_recycle(host, port) do
+    :telemetry.execute([:milvex, :connection, :recycle], %{}, %{
+      host: host,
+      port: port
     })
   end
 

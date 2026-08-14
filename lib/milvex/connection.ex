@@ -68,7 +68,11 @@ defmodule Milvex.Connection do
   alias Milvex.Errors
   alias Milvex.Telemetry
 
-  defstruct [:config, :channel, :conn_monitor_ref, :registry, retry_count: 0]
+  # Delay before retrying a failed proactive recycle. Must stay well below the
+  # server's ~1h connection age so we still beat the GOAWAY deadline.
+  @recycle_retry_delay 30_000
+
+  defstruct [:config, :channel, :conn_monitor_ref, :registry, :draining, retry_count: 0]
 
   @typedoc "gRPC channel used by Milvex connections."
   @type channel :: %GRPC.Channel{}
@@ -78,6 +82,7 @@ defmodule Milvex.Connection do
           channel: channel() | nil,
           conn_monitor_ref: reference() | nil,
           registry: {:ets.tid(), pos_integer()} | nil,
+          draining: {channel(), reference()} | nil,
           retry_count: non_neg_integer()
         }
 
@@ -190,6 +195,7 @@ defmodule Milvex.Connection do
           channel: nil,
           conn_monitor_ref: nil,
           registry: registry,
+          draining: nil,
           retry_count: 0
         }
 
@@ -268,7 +274,7 @@ defmodule Milvex.Connection do
 
   def connected(:enter, _old_state, data) do
     publish_channel(data)
-    :keep_state_and_data
+    {:keep_state_and_data, arm_recycle(data.config)}
   end
 
   def connected({:call, from}, :get_channel, data) do
@@ -283,23 +289,62 @@ defmodule Milvex.Connection do
     {:keep_state_and_data, [{:reply, from, {:ok, data.config}}]}
   end
 
+  def connected(:state_timeout, :recycle, data) do
+    data = clear_draining(data)
+
+    case establish_connection(data.config) do
+      {:ok, new_channel, new_monitor_ref} ->
+        Telemetry.connection_recycle(data.config.host, data.config.port)
+
+        old_channel = data.channel
+        old_monitor_ref = data.conn_monitor_ref
+
+        publish_channel(%{data | channel: new_channel})
+
+        {:keep_state,
+         %{
+           data
+           | channel: new_channel,
+             conn_monitor_ref: new_monitor_ref,
+             draining: {old_channel, old_monitor_ref}
+         },
+         [{{:timeout, :drain_old}, drain_grace(data.config), old_monitor_ref}] ++
+           arm_recycle(data.config)}
+
+      {:error, reason} ->
+        Logger.warning(
+          "Channel recycle failed: #{inspect(reason)}; keeping existing channel, " <>
+            "retrying in #{@recycle_retry_delay}ms..."
+        )
+
+        {:keep_state, data, [{:state_timeout, @recycle_retry_delay, :recycle}]}
+    end
+  end
+
+  def connected({:timeout, :drain_old}, _old_ref, data) do
+    {:keep_state, clear_draining(data)}
+  end
+
   def connected(:info, {:DOWN, ref, :process, _pid, reason}, %{conn_monitor_ref: ref} = data) do
     Telemetry.connection_disconnect(data.config.host, data.config.port, reason)
-    {:next_state, :reconnecting, %{data | channel: nil, conn_monitor_ref: nil, retry_count: 0}}
+
+    {:next_state, :reconnecting,
+     clear_draining(%{data | channel: nil, conn_monitor_ref: nil, retry_count: 0}),
+     [{{:timeout, :drain_old}, :cancel}]}
   end
 
-  def connected(:info, {:elixir_grpc, :connection_down, _pid}, data) do
-    Telemetry.connection_disconnect(data.config.host, data.config.port, :connection_down)
-    demonitor_connection(data.conn_monitor_ref)
-    close_channel(data.channel)
-    {:next_state, :reconnecting, %{data | channel: nil, conn_monitor_ref: nil, retry_count: 0}}
+  def connected(:info, {:DOWN, ref, :process, _pid, _reason}, %{draining: {_channel, ref}} = data) do
+    # The old channel died during the drain window; finalize without disturbing
+    # the newly published channel.
+    {:keep_state, clear_draining(data)}
   end
 
-  def connected(:info, {:gun_down, _pid, _protocol, reason, _killed_streams}, data) do
-    Telemetry.connection_disconnect(data.config.host, data.config.port, reason)
-    demonitor_connection(data.conn_monitor_ref)
-    close_channel(data.channel)
-    {:next_state, :reconnecting, %{data | channel: nil, conn_monitor_ref: nil, retry_count: 0}}
+  def connected(:info, {:elixir_grpc, :connection_down, pid}, data) do
+    handle_channel_down(data, pid, :connection_down)
+  end
+
+  def connected(:info, {:gun_down, pid, _protocol, reason, _killed_streams}, data) do
+    handle_channel_down(data, pid, reason)
   end
 
   def connected(:info, _msg, _data) do
@@ -316,6 +361,12 @@ defmodule Milvex.Connection do
   def reconnecting(:state_timeout, :reconnect, data), do: reconnect(data)
 
   def reconnecting(:state_timeout, :retry, data), do: reconnect(data)
+
+  # Defensive: a :drain_old generic timeout armed in :connected is cancelled on
+  # transition, but tolerate a leaked one rather than crashing the FSM.
+  def reconnecting({:timeout, :drain_old}, _old_ref, data) do
+    {:keep_state, clear_draining(data)}
+  end
 
   def reconnecting({:call, from}, :get_channel, data) do
     {:keep_state_and_data, [{:reply, from, not_connected_error(data)}]}
@@ -344,6 +395,7 @@ defmodule Milvex.Connection do
     end
 
     demonitor_connection(data.conn_monitor_ref)
+    close_draining(data)
 
     :ok
   end
@@ -444,6 +496,74 @@ defmodule Milvex.Connection do
     Process.demonitor(ref, [:flush])
   end
 
+  # --- Channel recycling ---
+
+  defp arm_recycle(%{channel_max_age: :infinity}), do: []
+
+  defp arm_recycle(config) do
+    [{:state_timeout, jittered_age(config), :recycle}]
+  end
+
+  @doc false
+  @spec jittered_age(map()) :: pos_integer()
+  def jittered_age(%{channel_max_age: age, channel_max_age_jitter: jitter}) do
+    if jitter == 0.0 do
+      age
+    else
+      lo = age * (1.0 - jitter)
+      hi = age * (1.0 + jitter)
+      round(lo + :rand.uniform() * (hi - lo))
+    end
+  end
+
+  # 2x the per-RPC timeout so in-flight streams on the old connection can
+  # finish before we tear it down (60s with the default 30s timeout).
+  defp drain_grace(%{timeout: timeout}), do: 2 * timeout
+
+  defp channel_conn_pid(%{adapter_payload: %{conn_pid: conn_pid}}) when is_pid(conn_pid) do
+    conn_pid
+  end
+
+  defp channel_conn_pid(_channel), do: nil
+
+  defp draining_conn_pid(%{draining: {channel, _ref}}), do: channel_conn_pid(channel)
+  defp draining_conn_pid(_data), do: nil
+
+  defp clear_draining(%{draining: nil} = data), do: data
+
+  defp clear_draining(data) do
+    close_draining(data)
+    %{data | draining: nil}
+  end
+
+  defp close_draining(%{draining: {channel, monitor_ref}}) do
+    demonitor_connection(monitor_ref)
+    close_channel(channel)
+    :ok
+  end
+
+  defp close_draining(_data), do: :ok
+
+  defp handle_channel_down(%{channel: channel} = data, pid, reason) do
+    cond do
+      channel_conn_pid(channel) == pid ->
+        Telemetry.connection_disconnect(data.config.host, data.config.port, reason)
+        demonitor_connection(data.conn_monitor_ref)
+        close_channel(channel)
+
+        {:next_state, :reconnecting,
+         clear_draining(%{data | channel: nil, conn_monitor_ref: nil, retry_count: 0}),
+         [{{:timeout, :drain_old}, :cancel}]}
+
+      draining_conn_pid(data) == pid ->
+        # Old channel died during drain; finalize without touching the new one.
+        {:keep_state, clear_draining(data)}
+
+      true ->
+        :keep_state_and_data
+    end
+  end
+
   defp build_connection_opts(config) do
     []
     |> maybe_add_ssl(config)
@@ -525,7 +645,8 @@ defimpl Inspect, for: Milvex.Connection do
     redacted = %{
       conn
       | config: redact_config(conn.config),
-        channel: redact_channel(conn.channel)
+        channel: redact_channel(conn.channel),
+        draining: redact_draining(conn.draining)
     }
 
     concat(["#Milvex.Connection<", to_doc(Map.from_struct(redacted), opts), ">"])
@@ -544,6 +665,12 @@ defimpl Inspect, for: Milvex.Connection do
 
   defp redact_channel(%GRPC.Channel{} = channel) do
     %{channel | headers: redact_headers(channel.headers)}
+  end
+
+  defp redact_draining(nil), do: nil
+
+  defp redact_draining({channel, ref}) do
+    {redact_channel(channel), ref}
   end
 
   defp redact_headers(headers) when is_list(headers) do

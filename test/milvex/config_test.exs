@@ -220,6 +220,42 @@ defmodule Milvex.ConfigTest do
     end
   end
 
+  describe "parse/1 channel recycling options" do
+    test "defaults disable recycling" do
+      {:ok, config} = Config.parse([])
+      assert config.channel_max_age == :infinity
+      assert config.channel_max_age_jitter == 0.2
+    end
+
+    test "parses custom channel recycling options" do
+      {:ok, config} =
+        Config.parse(channel_max_age: 3_000_000, channel_max_age_jitter: 0.15)
+
+      assert config.channel_max_age == 3_000_000
+      assert config.channel_max_age_jitter == 0.15
+    end
+
+    test "accepts :infinity channel_max_age" do
+      {:ok, config} = Config.parse(channel_max_age: :infinity)
+      assert config.channel_max_age == :infinity
+    end
+
+    test "validates channel_max_age minimum" do
+      {:error, error} = Config.parse(channel_max_age: 500)
+      assert error.message =~ "channel_max_age"
+    end
+
+    test "rejects non-integer channel_max_age" do
+      {:error, error} = Config.parse(channel_max_age: "forever")
+      assert error.message =~ "channel_max_age"
+    end
+
+    test "validates channel_max_age_jitter range" do
+      {:error, error} = Config.parse(channel_max_age_jitter: 1.5)
+      assert error.message =~ "channel_max_age_jitter"
+    end
+  end
+
   describe "full configuration scenarios" do
     test "production-like configuration" do
       {:ok, config} =

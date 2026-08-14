@@ -67,6 +67,28 @@ defmodule Milvex.Config do
                        |> Zoi.max(1.0)
                        |> Zoi.optional()
                        |> Zoi.default(0.1),
+                     channel_max_age:
+                       Zoi.union(
+                         [
+                           Zoi.literal(:infinity),
+                           Zoi.integer() |> Zoi.min(1_000)
+                         ],
+                         description:
+                           "Maximum channel lifetime in milliseconds before proactive " <>
+                             "recycling (:infinity disables recycling)"
+                       )
+                       |> Zoi.optional()
+                       |> Zoi.default(:infinity),
+                     channel_max_age_jitter:
+                       Zoi.float(
+                         description:
+                           "Fraction (0.0 to 1.0) of channel_max_age used to randomly " <>
+                             "jitter each channel's lifetime to de-synchronize pool recycling"
+                       )
+                       |> Zoi.min(0.0)
+                       |> Zoi.max(1.0)
+                       |> Zoi.optional()
+                       |> Zoi.default(0.2),
                      retry_max_attempts:
                        Zoi.integer(
                          description:

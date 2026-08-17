@@ -226,13 +226,20 @@ defmodule Milvex.ConnectionRecycleTest do
       assert Connection.jittered_age(config) == 10_000
     end
 
-    test "returns values within [age*(1-j), age*(1+j)] and varies" do
+    test "returns varying values within [age*(1-j), age]" do
       :rand.seed(:exsss, {101, 202, 303})
       config = %{channel_max_age: 10_000, channel_max_age_jitter: 0.2}
       ages = for _ <- 1..50, do: Connection.jittered_age(config)
 
-      assert Enum.all?(ages, &(&1 >= 8_000 and &1 <= 12_000))
+      assert Enum.all?(ages, &(&1 >= 8_000 and &1 <= 10_000))
       assert ages |> Enum.uniq() |> length() > 1
+    end
+
+    test "returns a positive age when jitter is 1" do
+      config = %{channel_max_age: 10_000, channel_max_age_jitter: 1.0}
+      ages = for _ <- 1..50, do: Connection.jittered_age(config)
+
+      assert Enum.all?(ages, &(&1 >= 1 and &1 <= 10_000))
     end
   end
 

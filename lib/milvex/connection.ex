@@ -510,9 +510,8 @@ defmodule Milvex.Connection do
     if jitter == 0.0 do
       age
     else
-      lo = age * (1.0 - jitter)
-      hi = age * (1.0 + jitter)
-      round(lo + :rand.uniform() * (hi - lo))
+      lo = max(1, age * (1.0 - jitter))
+      round(lo + :rand.uniform() * (age - lo))
     end
   end
 

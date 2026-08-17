@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.2](https://github.com/grain-team/milvex/compare/v0.14.1...v0.14.2) (2026-08-17)
+
+
+### Bug Fixes
+
+* Fixed jitter ([3848a86](https://github.com/grain-team/milvex/commit/3848a86032dea7a7a70842f890f67426857b29a9))
+* **goaway:** Fixed go-away on pools, refreshing before the time limit ([1eec8b4](https://github.com/grain-team/milvex/commit/1eec8b4af67ed024156f9b577a8345508691960e))
+
 ## [0.14.1](https://github.com/grain-team/milvex/compare/v0.14.0...v0.14.1) (2026-08-10)
 
 

@@ -220,6 +220,87 @@ defmodule Milvex.ConnectionRecycleTest do
     end
   end
 
+  describe "server version cache lifecycle" do
+    setup do
+      stub_successful_connect()
+
+      stub(GRPC.Stub, :connect, fn _address, _opts ->
+        conn_pid = spawn(fn -> Process.sleep(:infinity) end)
+        {:ok, %GRPC.Channel{ref: make_ref(), adapter_payload: %{conn_pid: conn_pid}}}
+      end)
+
+      :ok
+    end
+
+    test "disconnect forgets versions for monitored and unmonitored channels" do
+      conn_pid = spawn(fn -> Process.sleep(:infinity) end)
+
+      for payload <- [%{conn_pid: conn_pid}, nil] do
+        channel = %GRPC.Channel{ref: make_ref(), adapter_payload: payload}
+        stub(GRPC.Stub, :connect, fn _address, _opts -> {:ok, channel} end)
+        {:ok, conn} = Connection.start_link(host: "localhost")
+        eventually(fn -> assert {:ok, ^channel, _} = Connection.get_channel(conn) end)
+        :ets.insert(:milvex_server_versions, {channel.ref, :unknown})
+
+        assert :ok = Connection.disconnect(conn)
+        assert :ets.lookup(:milvex_server_versions, channel.ref) == []
+      end
+    end
+
+    test "monitored connection death forgets the dropped channel's version" do
+      {:ok, conn} = Connection.start_link(host: "localhost")
+
+      channel =
+        eventually(fn ->
+          assert {:ok, channel, _} = Connection.get_channel(conn)
+          channel
+        end)
+
+      :ets.insert(:milvex_server_versions, {channel.ref, %Version{major: 3, minor: 0, patch: 3}})
+      Process.exit(channel.adapter_payload.conn_pid, :kill)
+
+      eventually(fn -> assert :ets.lookup(:milvex_server_versions, channel.ref) == [] end)
+
+      eventually(fn ->
+        assert {:ok, replacement, _} = Connection.get_channel(conn)
+        assert replacement.ref != channel.ref
+      end)
+
+      Connection.disconnect(conn)
+    end
+
+    test "recycle retains the cached version until the old channel finishes draining" do
+      {:ok, conn} =
+        Connection.start_link(
+          host: "localhost",
+          channel_max_age: 3_000,
+          channel_max_age_jitter: 0.0,
+          timeout: 1_000
+        )
+
+      initial =
+        eventually(fn ->
+          assert {:ok, channel, _} = Connection.get_channel(conn)
+          channel
+        end)
+
+      version = %Version{major: 3, minor: 0, patch: 3}
+      :ets.insert(:milvex_server_versions, {initial.ref, version})
+
+      eventually(
+        fn ->
+          assert {:ok, current, _} = Connection.get_channel(conn)
+          assert current.ref != initial.ref
+        end,
+        200
+      )
+
+      assert :ets.lookup(:milvex_server_versions, initial.ref) == [{initial.ref, version}]
+      eventually(fn -> assert :ets.lookup(:milvex_server_versions, initial.ref) == [] end, 200)
+      Connection.disconnect(conn)
+    end
+  end
+
   describe "jittered_age/1" do
     test "returns the exact age when jitter is 0" do
       config = %{channel_max_age: 10_000, channel_max_age_jitter: 0.0}

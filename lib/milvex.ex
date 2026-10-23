@@ -883,7 +883,7 @@ defmodule Milvex do
                rpc_opts
              ),
            {:ok, resp} <- RPC.with_status_check(response, "Query") do
-        {:ok, QueryResult.from_proto(resp)}
+        decode_result(resp, QueryResult)
       end
     end
   end
@@ -1013,7 +1013,7 @@ defmodule Milvex do
                rpc_opts
              ),
            {:ok, resp} <- RPC.with_status_check(response, "Search") do
-        {:ok, SearchResult.from_proto(resp)}
+        decode_result(resp, SearchResult)
       end
     end
   end
@@ -1191,9 +1191,15 @@ defmodule Milvex do
                rpc_opts
              ),
            {:ok, resp} <- RPC.with_status_check(response, "HybridSearch") do
-        {:ok, SearchResult.from_proto(resp)}
+        decode_result(resp, SearchResult)
       end
     end
+  end
+
+  defp decode_result(response, result_module) do
+    {:ok, result_module.from_proto(response)}
+  rescue
+    error in Invalid -> {:error, error}
   end
 
   defp build_search_requests(searches, schema) do

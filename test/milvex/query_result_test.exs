@@ -11,6 +11,39 @@ defmodule Milvex.QueryResultTest do
   alias Milvex.Milvus.Proto.Schema.StringArray
   alias Milvex.Milvus.Proto.Schema.VectorField
 
+  test "nullable output column preserves null rows" do
+    proto = %QueryResults{
+      fields_data: [
+        %FieldData{
+          field_name: "value",
+          type: :Int64,
+          valid_data: [true, false],
+          field: {:scalars, %ScalarField{data: {:long_data, %LongArray{data: [42]}}}}
+        }
+      ]
+    }
+
+    result = QueryResult.from_proto(proto)
+    assert result.rows == [%{"value" => 42}, %{"value" => nil}]
+  end
+
+  test "unsupported output column raises Invalid" do
+    proto = %QueryResults{
+      fields_data: [
+        %FieldData{
+          field_name: "molecule",
+          field:
+            {:scalars,
+             %ScalarField{data: {:mol_data, %Milvex.Milvus.Proto.Schema.MolArray{data: ["mol"]}}}}
+        }
+      ]
+    }
+
+    error = assert_raise Milvex.Errors.Invalid, fn -> QueryResult.from_proto(proto) end
+    assert error.code == :unsupported_data_type
+    assert error.field == "molecule"
+  end
+
   describe "from_proto/1" do
     test "parses empty result" do
       proto = %QueryResults{

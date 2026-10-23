@@ -6,6 +6,10 @@ defmodule Milvex.HybridSearchTest do
 
   alias Milvex.AnnSearch
   alias Milvex.Connection
+  alias Milvex.Milvus.Proto.Schema.FieldData
+  alias Milvex.Milvus.Proto.Schema.MolArray
+  alias Milvex.Milvus.Proto.Schema.ScalarField
+  alias Milvex.Milvus.Proto.Schema.SearchResultData
   alias Milvex.Ranker
   alias Milvex.RPC
 
@@ -57,6 +61,35 @@ defmodule Milvex.HybridSearchTest do
   setup do
     stub(Connection, :get_config, fn _conn, _opts -> {:ok, @config} end)
     :ok
+  end
+
+  test "hybrid_search returns unsupported column decode errors" do
+    {:ok, search} = AnnSearch.new("field1", [[0.1, 0.2]], limit: 10)
+    {:ok, ranker} = Ranker.rrf()
+    stub(Connection, :get_channel, fn _, _ -> {:ok, @channel, @config} end)
+    expect(RPC, :call, fn _, _, :describe_collection, _, _ -> @describe_response end)
+
+    expect(RPC, :call, fn _, _, :hybrid_search, _, _ ->
+      {:ok,
+       %SearchResults{
+         status: %Status{code: 0},
+         results: %SearchResultData{
+           fields_data: [
+             %FieldData{
+               field_name: "molecule",
+               field:
+                 {:scalars,
+                  %ScalarField{
+                    data: {:mol_data, %MolArray{data: ["mol"]}}
+                  }}
+             }
+           ]
+         }
+       }}
+    end)
+
+    assert {:error, %Milvex.Errors.Invalid{code: :unsupported_data_type, field: "molecule"}} =
+             Milvex.hybrid_search(:conn, "test", [search], ranker)
   end
 
   describe "hybrid_search/5 validation" do

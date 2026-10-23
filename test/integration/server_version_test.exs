@@ -4,7 +4,7 @@ defmodule Milvex.ServerVersionIntegrationTest do
   @moduletag :integration
 
   test "detects the server version for the selected image", %{conn: conn} do
-    image = System.get_env("MILVUS_IMAGE", "milvusdb/milvus:v2.6.6")
+    image = Milvex.MilvusContainer.image()
 
     assert [major_tag] = Regex.run(~r/:v?(\d+)\./, image, capture: :all_but_first)
     expected_major = String.to_integer(major_tag)

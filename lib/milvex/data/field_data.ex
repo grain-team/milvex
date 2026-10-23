@@ -8,6 +8,7 @@ defmodule Milvex.Data.FieldData do
 
   import Bitwise
 
+  alias Milvex.Errors
   alias Milvex.Schema.Field
 
   alias Milvex.Milvus.Proto.Schema.ArrayArray
@@ -15,6 +16,7 @@ defmodule Milvex.Data.FieldData do
   alias Milvex.Milvus.Proto.Schema.DoubleArray
   alias Milvex.Milvus.Proto.Schema.FieldData
   alias Milvex.Milvus.Proto.Schema.FloatArray
+  alias Milvex.Milvus.Proto.Schema.GeometryWktArray
   alias Milvex.Milvus.Proto.Schema.IntArray
   alias Milvex.Milvus.Proto.Schema.JSONArray
   alias Milvex.Milvus.Proto.Schema.LongArray
@@ -83,6 +85,10 @@ defmodule Milvex.Data.FieldData do
   Extracts values from a FieldData proto struct.
 
   Returns a tuple of `{field_name, values}` where values is a list.
+  Rows marked invalid by `valid_data` are returned as `nil`.
+
+  Raises `Milvex.Errors.Invalid` for unsupported scalar or vector variants,
+  or when the validity mask does not match the decoded values.
 
   ## Examples
 
@@ -93,7 +99,31 @@ defmodule Milvex.Data.FieldData do
   @spec from_proto(FieldData.t()) :: {String.t(), list()}
   def from_proto(%FieldData{} = field_data) do
     values = extract_values(field_data)
+    values = apply_validity(values, field_data.valid_data, field_data.field_name)
     {field_data.field_name, values}
+  end
+
+  defp apply_validity(values, [], _field), do: values
+
+  defp apply_validity(values, valid, _field) when length(values) == length(valid) do
+    Enum.zip_with(values, valid, fn value, valid? -> if valid?, do: value end)
+  end
+
+  defp apply_validity(values, valid, field) do
+    if length(values) == Enum.count(valid, & &1) do
+      {out, []} =
+        Enum.map_reduce(valid, values, fn
+          true, [value | rest] -> {value, rest}
+          false, rest -> {nil, rest}
+        end)
+
+      out
+    else
+      raise Errors.Invalid,
+        field: field,
+        code: :malformed_field_data,
+        message: "#{length(values)} values do not match a #{length(valid)}-row validity mask"
+    end
   end
 
   @doc """
@@ -170,26 +200,39 @@ defmodule Milvex.Data.FieldData do
   Extracts values from a ScalarField proto.
   """
   @spec extract_scalar_values(ScalarField.t()) :: list()
-  def extract_scalar_values(%ScalarField{data: data}), do: do_extract_scalar(data)
+  def extract_scalar_values(%ScalarField{data: data}), do: do_extract_scalar(data, nil)
 
-  defp do_extract_scalar({:bool_data, %BoolArray{data: values}}), do: values
-  defp do_extract_scalar({:int_data, %IntArray{data: values}}), do: values
-  defp do_extract_scalar({:long_data, %LongArray{data: values}}), do: values
-  defp do_extract_scalar({:float_data, %FloatArray{data: values}}), do: values
-  defp do_extract_scalar({:double_data, %DoubleArray{data: values}}), do: values
-  defp do_extract_scalar({:string_data, %StringArray{data: values}}), do: values
+  defp do_extract_scalar({:bool_data, %BoolArray{data: values}}, _field), do: values
+  defp do_extract_scalar({:int_data, %IntArray{data: values}}, _field), do: values
+  defp do_extract_scalar({:long_data, %LongArray{data: values}}, _field), do: values
+  defp do_extract_scalar({:float_data, %FloatArray{data: values}}, _field), do: values
+  defp do_extract_scalar({:double_data, %DoubleArray{data: values}}, _field), do: values
+  defp do_extract_scalar({:string_data, %StringArray{data: values}}, _field), do: values
 
-  defp do_extract_scalar({:json_data, %JSONArray{data: values}}),
+  defp do_extract_scalar({:geometry_wkt_data, %GeometryWktArray{data: values}}, _field),
+    do: values
+
+  defp do_extract_scalar({:json_data, %JSONArray{data: values}}, _field),
     do: Enum.map(values, &decode_json/1)
 
-  defp do_extract_scalar({:timestamptz_data, %TimestamptzArray{data: values}}),
+  defp do_extract_scalar({:timestamptz_data, %TimestamptzArray{data: values}}, _field),
     do: Enum.map(values, &decode_timestamp/1)
 
-  defp do_extract_scalar({:array_data, %ArrayArray{data: scalar_fields}}) do
-    Enum.map(scalar_fields, &extract_scalar_values/1)
+  defp do_extract_scalar({:array_data, %ArrayArray{data: scalar_fields}}, field) do
+    Enum.map(scalar_fields, fn %ScalarField{data: data} -> do_extract_scalar(data, field) end)
   end
 
-  defp do_extract_scalar(_), do: []
+  defp do_extract_scalar(nil, _field), do: []
+
+  defp do_extract_scalar({variant, _}, field), do: unsupported_data_type!(variant, field)
+
+  defp unsupported_data_type!(variant, field) do
+    raise Errors.Invalid,
+      field: field,
+      code: :unsupported_data_type,
+      message:
+        "Unsupported column variant #{inspect(variant)}; leave this field out of output_fields"
+  end
 
   @doc """
   Extracts values from a VectorField proto.
@@ -198,7 +241,11 @@ defmodule Milvex.Data.FieldData do
   Sparse vectors are returned as tuple lists.
   """
   @spec extract_vector_values(VectorField.t()) :: list()
-  def extract_vector_values(%VectorField{dim: dim, data: data}) do
+  def extract_vector_values(%VectorField{} = vector), do: do_extract_vector(vector, nil)
+
+  defp do_extract_vector(%VectorField{data: nil}, _field), do: []
+
+  defp do_extract_vector(%VectorField{dim: dim, data: data}, field) do
     case data do
       {:float_vector, %FloatArray{data: values}} ->
         chunk_vector(values, dim)
@@ -219,10 +266,10 @@ defmodule Milvex.Data.FieldData do
         decode_sparse_vectors(contents)
 
       {:vector_array, %VectorArray{data: vector_fields}} ->
-        Enum.map(vector_fields, &extract_vector_values/1)
+        Enum.map(vector_fields, &do_extract_vector(&1, field))
 
-      _ ->
-        []
+      {variant, _} ->
+        unsupported_data_type!(variant, field)
     end
   end
 
@@ -353,12 +400,12 @@ defmodule Milvex.Data.FieldData do
     }
   end
 
-  defp extract_values(%FieldData{field: {:scalars, scalars}}) do
-    extract_scalar_values(scalars)
+  defp extract_values(%FieldData{field_name: name, field: {:scalars, %ScalarField{data: data}}}) do
+    do_extract_scalar(data, name)
   end
 
-  defp extract_values(%FieldData{field: {:vectors, vectors}}) do
-    extract_vector_values(vectors)
+  defp extract_values(%FieldData{field_name: name, field: {:vectors, vectors}}) do
+    do_extract_vector(vectors, name)
   end
 
   defp extract_values(%FieldData{field: {:struct_arrays, struct_arrays}}) do

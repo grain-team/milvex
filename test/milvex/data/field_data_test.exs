@@ -645,4 +645,97 @@ defmodule Milvex.Data.FieldDataTest do
       assert Enum.at(values, 1) == %{"id" => [3, 4], "score" => [0.7, 0.8]}
     end
   end
+
+  test "from_proto decodes Geometry WKT" do
+    proto = %FieldDataProto{
+      field_name: "loc",
+      field:
+        {:scalars,
+         %ScalarField{
+           data:
+             {:geometry_wkt_data,
+              %Milvex.Milvus.Proto.Schema.GeometryWktArray{data: ["POINT (1 2)"]}}
+         }}
+    }
+
+    assert FieldData.from_proto(proto) == {"loc", ["POINT (1 2)"]}
+  end
+
+  test "from_proto rejects unsupported scalar variants with the field name" do
+    for {variant, data} <- [
+          {:date_data, %Milvex.Milvus.Proto.Schema.DateArray{data: [1]}},
+          {:mol_data, %Milvex.Milvus.Proto.Schema.MolArray{data: ["mol"]}},
+          {:geometry_data, %Milvex.Milvus.Proto.Schema.GeometryArray{data: [<<1>>]}}
+        ] do
+      scalar = %ScalarField{data: {variant, data}}
+      proto = %FieldDataProto{field_name: "unsupported", field: {:scalars, scalar}}
+
+      error = assert_raise Milvex.Errors.Invalid, fn -> FieldData.from_proto(proto) end
+      assert error.code == :unsupported_data_type
+      assert error.field == "unsupported"
+      assert error.message =~ inspect(variant)
+      assert error.message =~ "output_fields"
+
+      error =
+        assert_raise Milvex.Errors.Invalid, fn -> FieldData.extract_scalar_values(scalar) end
+
+      assert error.field == nil
+      assert error.code == :unsupported_data_type
+    end
+  end
+
+  test "from_proto rejects unsupported vector variants with the field name" do
+    vector = struct!(VectorField, dim: 2, data: {:future_vector, <<1, 2>>})
+    proto = %FieldDataProto{field_name: "embedding", field: {:vectors, vector}}
+
+    error = assert_raise Milvex.Errors.Invalid, fn -> FieldData.from_proto(proto) end
+    assert error.code == :unsupported_data_type
+    assert error.field == "embedding"
+    assert error.message =~ ":future_vector"
+    assert error.message =~ "output_fields"
+
+    error = assert_raise Milvex.Errors.Invalid, fn -> FieldData.extract_vector_values(vector) end
+    assert error.field == nil
+    assert error.code == :unsupported_data_type
+  end
+
+  test "from_proto replaces full-length masked values with nil" do
+    proto = %FieldDataProto{
+      field_name: "count",
+      field: {:scalars, %ScalarField{data: {:int_data, %IntArray{data: [1, 0, 3]}}}},
+      valid_data: [true, false, true]
+    }
+
+    assert FieldData.from_proto(proto) == {"count", [1, nil, 3]}
+  end
+
+  test "from_proto expands compact masked columns including all-null columns" do
+    for {values, mask, expected} <- [
+          {[1, 3], [true, false, true], [1, nil, 3]},
+          {[1, 3], [false, true, true, false], [nil, 1, 3, nil]},
+          {[], [false, false], [nil, nil]}
+        ] do
+      proto = %FieldDataProto{
+        field_name: "count",
+        field: {:scalars, %ScalarField{data: {:int_data, %IntArray{data: values}}}},
+        valid_data: mask
+      }
+
+      assert FieldData.from_proto(proto) == {"count", expected}
+    end
+  end
+
+  test "from_proto rejects validity masks inconsistent with the decoded values" do
+    for values <- [[1], [1, 2, 3, 4]] do
+      proto = %FieldDataProto{
+        field_name: "count",
+        field: {:scalars, %ScalarField{data: {:int_data, %IntArray{data: values}}}},
+        valid_data: [true, false, true]
+      }
+
+      error = assert_raise Milvex.Errors.Invalid, fn -> FieldData.from_proto(proto) end
+      assert error.code == :malformed_field_data
+      assert error.field == "count"
+    end
+  end
 end

@@ -41,7 +41,7 @@ mix bench.result
 
 ### Core Modules
 
-- `Milvex` (`lib/milvex.ex`) - High-level client API. All collection, partition, index, and data operations go through here. Each operation has a raising variant (e.g., `insert!`).
+- `Milvex` (`lib/milvex.ex`) - High-level client API. All collection, partition, index, and data operations go through here. Operations return `:ok`, `{:ok, result}`, or `{:error, error}`; there are no raising (`!`) variants.
 
 - `Milvex.Connection` (`lib/milvex/connection.ex`) - GenStateMachine managing gRPC channel lifecycle. States: `:connecting` -> `:connected` <-> `:reconnecting`. Handles automatic reconnection and health checks.
 
@@ -84,7 +84,7 @@ protoc --elixir_out=one_file_per_module=true,plugins=grpc:../../lib \
 
 ## Key Conventions
 
-- All public API functions have raising variants (suffix `!`)
+- `Milvex` API functions return tuples and never have `!` variants; builders (`Schema.build!`, `Data.from_rows!`, `Index.validate!`) do
 - Field names can be atoms or strings (normalized internally to strings)
 - Schemas and data builders follow a fluent/pipeline pattern
 - Validation uses Zoi for schema validation

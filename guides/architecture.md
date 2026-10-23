@@ -29,9 +29,7 @@ The main entry point for all operations. Provides high-level functions for:
 - Index management (`create_index`, `drop_index`)
 - Partition management (`create_partition`, `drop_partition`)
 
-All functions have two variants:
-- Regular functions return `{:ok, result}` or `{:error, error}`
-- Bang functions (e.g., `insert!`) raise on error
+API functions return `:ok`, `{:ok, result}`, or `{:error, error}`; they do not raise. Builders such as `Milvex.Schema.build!/1` and `Milvex.Data.from_rows!/3` have raising variants.
 
 ### Milvex.Connection
 

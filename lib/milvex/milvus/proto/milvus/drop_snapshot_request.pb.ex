@@ -3,4 +3,6 @@ defmodule Milvex.Milvus.Proto.Milvus.DropSnapshotRequest do
 
   field :base, 1, type: Milvex.Milvus.Proto.Common.MsgBase
   field :name, 2, type: :string
+  field :db_name, 3, type: :string, json_name: "dbName"
+  field :collection_name, 4, type: :string, json_name: "collectionName"
 end

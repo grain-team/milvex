@@ -37,4 +37,16 @@ defmodule Milvex.Milvus.Proto.Schema.SearchResultData do
   field :element_indices, 15,
     type: Milvex.Milvus.Proto.Schema.LongArray,
     json_name: "elementIndices"
+
+  field :group_by_field_values, 17,
+    repeated: true,
+    type: Milvex.Milvus.Proto.Schema.FieldData,
+    json_name: "groupByFieldValues"
+
+  field :agg_buckets, 18,
+    repeated: true,
+    type: Milvex.Milvus.Proto.Schema.AggBucket,
+    json_name: "aggBuckets"
+
+  field :agg_topks, 19, repeated: true, type: :int64, json_name: "aggTopks"
 end

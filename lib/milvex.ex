@@ -1789,8 +1789,7 @@ defmodule Milvex do
       (default: false, logical add)
     - `:db_name` - Database name (default: "")
 
-  The response carries both an `alter_status` and an `index_status`; both must
-  be successful for this call to return `:ok`.
+  The response's `alter_status` must be successful for this call to return `:ok`.
 
   ## Returns
 
@@ -2245,7 +2244,7 @@ defmodule Milvex do
   defp build_drop_action(opts) do
     case Keyword.get(opts, :drop_fields, []) do
       [name] when is_binary(name) ->
-        request = %AlterCollectionSchemaDropRequest{field_identifier: {:field_name, name}}
+        request = %AlterCollectionSchemaDropRequest{identifier: {:field_name, name}}
         {:ok, wrap_action({:drop_request, request})}
 
       names when is_list(names) and length(names) > 1 ->
@@ -2269,11 +2268,8 @@ defmodule Milvex do
   end
 
   defp check_alter_collection_schema_status(%AlterCollectionSchemaResponse{
-         alter_status: alter_status,
-         index_status: index_status
+         alter_status: alter_status
        }) do
-    with :ok <- RPC.check_status(alter_status, "AlterCollectionSchema") do
-      RPC.check_status(index_status, "AlterCollectionSchema (index)")
-    end
+    RPC.check_status(alter_status, "AlterCollectionSchema")
   end
 end

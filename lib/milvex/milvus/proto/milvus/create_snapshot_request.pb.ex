@@ -10,4 +10,5 @@ defmodule Milvex.Milvus.Proto.Milvus.CreateSnapshotRequest do
   field :description, 3, type: :string
   field :db_name, 4, type: :string, json_name: "dbName"
   field :collection_name, 5, type: :string, json_name: "collectionName"
+  field :compaction_protection_seconds, 6, type: :int64, json_name: "compactionProtectionSeconds"
 end

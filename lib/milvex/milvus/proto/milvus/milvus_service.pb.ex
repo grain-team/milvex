@@ -116,6 +116,18 @@ defmodule Milvex.Milvus.Proto.Milvus.MilvusService.Service do
   )
 
   rpc(
+    :Prewarm,
+    Milvex.Milvus.Proto.Milvus.PrewarmRequest,
+    Milvex.Milvus.Proto.Milvus.PrewarmResponse
+  )
+
+  rpc(
+    :DescribePrewarmTask,
+    Milvex.Milvus.Proto.Milvus.DescribePrewarmTaskRequest,
+    Milvex.Milvus.Proto.Milvus.DescribePrewarmTaskResponse
+  )
+
+  rpc(
     :ReleasePartitions,
     Milvex.Milvus.Proto.Milvus.ReleasePartitionsRequest,
     Milvex.Milvus.Proto.Common.Status
@@ -131,6 +143,42 @@ defmodule Milvex.Milvus.Proto.Milvus.MilvusService.Service do
     :ShowPartitions,
     Milvex.Milvus.Proto.Milvus.ShowPartitionsRequest,
     Milvex.Milvus.Proto.Milvus.ShowPartitionsResponse
+  )
+
+  rpc(
+    :CreateNamespace,
+    Milvex.Milvus.Proto.Milvus.CreateNamespaceRequest,
+    Milvex.Milvus.Proto.Milvus.CreateNamespaceResponse
+  )
+
+  rpc(
+    :DescribeNamespace,
+    Milvex.Milvus.Proto.Milvus.DescribeNamespaceRequest,
+    Milvex.Milvus.Proto.Milvus.DescribeNamespaceResponse
+  )
+
+  rpc(
+    :ListNamespaces,
+    Milvex.Milvus.Proto.Milvus.ListNamespacesRequest,
+    Milvex.Milvus.Proto.Milvus.ListNamespacesResponse
+  )
+
+  rpc(
+    :DropNamespace,
+    Milvex.Milvus.Proto.Milvus.DropNamespaceRequest,
+    Milvex.Milvus.Proto.Milvus.DropNamespaceResponse
+  )
+
+  rpc(
+    :HasNamespace,
+    Milvex.Milvus.Proto.Milvus.HasNamespaceRequest,
+    Milvex.Milvus.Proto.Milvus.HasNamespaceResponse
+  )
+
+  rpc(
+    :GetNamespaceStats,
+    Milvex.Milvus.Proto.Milvus.GetNamespaceStatsRequest,
+    Milvex.Milvus.Proto.Milvus.GetNamespaceStatsResponse
   )
 
   rpc(
@@ -258,6 +306,12 @@ defmodule Milvex.Milvus.Proto.Milvus.MilvusService.Service do
   )
 
   rpc(
+    :AddCollectionStructField,
+    Milvex.Milvus.Proto.Milvus.AddCollectionStructFieldRequest,
+    Milvex.Milvus.Proto.Common.Status
+  )
+
+  rpc(
     :GetFlushState,
     Milvex.Milvus.Proto.Milvus.GetFlushStateRequest,
     Milvex.Milvus.Proto.Milvus.GetFlushStateResponse
@@ -378,6 +432,8 @@ defmodule Milvex.Milvus.Proto.Milvus.MilvusService.Service do
     Milvex.Milvus.Proto.Milvus.CreateRoleRequest,
     Milvex.Milvus.Proto.Common.Status
   )
+
+  rpc(:AlterRole, Milvex.Milvus.Proto.Milvus.AlterRoleRequest, Milvex.Milvus.Proto.Common.Status)
 
   rpc(:DropRole, Milvex.Milvus.Proto.Milvus.DropRoleRequest, Milvex.Milvus.Proto.Common.Status)
 
@@ -640,6 +696,36 @@ defmodule Milvex.Milvus.Proto.Milvus.MilvusService.Service do
   )
 
   rpc(
+    :UpdateRowPolicy,
+    Milvex.Milvus.Proto.Milvus.UpdateRowPolicyRequest,
+    Milvex.Milvus.Proto.Common.Status
+  )
+
+  rpc(
+    :SetRLSPrincipalTags,
+    Milvex.Milvus.Proto.Milvus.SetRLSPrincipalTagsRequest,
+    Milvex.Milvus.Proto.Common.Status
+  )
+
+  rpc(
+    :GetRLSPrincipalTags,
+    Milvex.Milvus.Proto.Milvus.GetRLSPrincipalTagsRequest,
+    Milvex.Milvus.Proto.Milvus.GetRLSPrincipalTagsResponse
+  )
+
+  rpc(
+    :ListRLSPrincipals,
+    Milvex.Milvus.Proto.Milvus.ListRLSPrincipalsRequest,
+    Milvex.Milvus.Proto.Milvus.ListRLSPrincipalsResponse
+  )
+
+  rpc(
+    :DeleteRLSPrincipalTags,
+    Milvex.Milvus.Proto.Milvus.DeleteRLSPrincipalTagsRequest,
+    Milvex.Milvus.Proto.Common.Status
+  )
+
+  rpc(
     :UpdateReplicateConfiguration,
     Milvex.Milvus.Proto.Milvus.UpdateReplicateConfigurationRequest,
     Milvex.Milvus.Proto.Common.Status
@@ -667,6 +753,114 @@ defmodule Milvex.Milvus.Proto.Milvus.MilvusService.Service do
     :DumpMessages,
     Milvex.Milvus.Proto.Milvus.DumpMessagesRequest,
     stream(Milvex.Milvus.Proto.Milvus.DumpMessagesResponse)
+  )
+
+  rpc(
+    :ComputePhraseMatchSlop,
+    Milvex.Milvus.Proto.Milvus.ComputePhraseMatchSlopRequest,
+    Milvex.Milvus.Proto.Milvus.ComputePhraseMatchSlopResponse
+  )
+
+  rpc(
+    :CreateSnapshot,
+    Milvex.Milvus.Proto.Milvus.CreateSnapshotRequest,
+    Milvex.Milvus.Proto.Common.Status
+  )
+
+  rpc(
+    :DropSnapshot,
+    Milvex.Milvus.Proto.Milvus.DropSnapshotRequest,
+    Milvex.Milvus.Proto.Common.Status
+  )
+
+  rpc(
+    :ListSnapshots,
+    Milvex.Milvus.Proto.Milvus.ListSnapshotsRequest,
+    Milvex.Milvus.Proto.Milvus.ListSnapshotsResponse
+  )
+
+  rpc(
+    :DescribeSnapshot,
+    Milvex.Milvus.Proto.Milvus.DescribeSnapshotRequest,
+    Milvex.Milvus.Proto.Milvus.DescribeSnapshotResponse
+  )
+
+  rpc(
+    :RestoreSnapshot,
+    Milvex.Milvus.Proto.Milvus.RestoreSnapshotRequest,
+    Milvex.Milvus.Proto.Milvus.RestoreSnapshotResponse
+  )
+
+  rpc(
+    :RestoreExternalSnapshot,
+    Milvex.Milvus.Proto.Milvus.RestoreExternalSnapshotRequest,
+    Milvex.Milvus.Proto.Milvus.RestoreExternalSnapshotResponse
+  )
+
+  rpc(
+    :ExportSnapshot,
+    Milvex.Milvus.Proto.Milvus.ExportSnapshotRequest,
+    Milvex.Milvus.Proto.Milvus.ExportSnapshotResponse
+  )
+
+  rpc(
+    :GetExportSnapshotState,
+    Milvex.Milvus.Proto.Milvus.GetExportSnapshotStateRequest,
+    Milvex.Milvus.Proto.Milvus.GetExportSnapshotStateResponse
+  )
+
+  rpc(
+    :GetRestoreSnapshotState,
+    Milvex.Milvus.Proto.Milvus.GetRestoreSnapshotStateRequest,
+    Milvex.Milvus.Proto.Milvus.GetRestoreSnapshotStateResponse
+  )
+
+  rpc(
+    :ListRestoreSnapshotJobs,
+    Milvex.Milvus.Proto.Milvus.ListRestoreSnapshotJobsRequest,
+    Milvex.Milvus.Proto.Milvus.ListRestoreSnapshotJobsResponse
+  )
+
+  rpc(
+    :PinSnapshotData,
+    Milvex.Milvus.Proto.Milvus.PinSnapshotDataRequest,
+    Milvex.Milvus.Proto.Milvus.PinSnapshotDataResponse
+  )
+
+  rpc(
+    :UnpinSnapshotData,
+    Milvex.Milvus.Proto.Milvus.UnpinSnapshotDataRequest,
+    Milvex.Milvus.Proto.Common.Status
+  )
+
+  rpc(
+    :AlterCollectionSchema,
+    Milvex.Milvus.Proto.Milvus.AlterCollectionSchemaRequest,
+    Milvex.Milvus.Proto.Milvus.AlterCollectionSchemaResponse
+  )
+
+  rpc(
+    :BatchUpdateManifest,
+    Milvex.Milvus.Proto.Milvus.BatchUpdateManifestRequest,
+    Milvex.Milvus.Proto.Common.Status
+  )
+
+  rpc(
+    :RefreshExternalCollection,
+    Milvex.Milvus.Proto.Milvus.RefreshExternalCollectionRequest,
+    Milvex.Milvus.Proto.Milvus.RefreshExternalCollectionResponse
+  )
+
+  rpc(
+    :GetRefreshExternalCollectionProgress,
+    Milvex.Milvus.Proto.Milvus.GetRefreshExternalCollectionProgressRequest,
+    Milvex.Milvus.Proto.Milvus.GetRefreshExternalCollectionProgressResponse
+  )
+
+  rpc(
+    :ListRefreshExternalCollectionJobs,
+    Milvex.Milvus.Proto.Milvus.ListRefreshExternalCollectionJobsRequest,
+    Milvex.Milvus.Proto.Milvus.ListRefreshExternalCollectionJobsResponse
   )
 end
 

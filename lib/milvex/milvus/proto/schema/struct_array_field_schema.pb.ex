@@ -10,4 +10,6 @@ defmodule Milvex.Milvus.Proto.Schema.StructArrayFieldSchema do
     repeated: true,
     type: Milvex.Milvus.Proto.Common.KeyValuePair,
     json_name: "typeParams"
+
+  field :nullable, 6, type: :bool
 end

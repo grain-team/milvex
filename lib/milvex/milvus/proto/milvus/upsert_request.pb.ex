@@ -21,4 +21,7 @@ defmodule Milvex.Milvus.Proto.Milvus.UpsertRequest do
     repeated: true,
     type: Milvex.Milvus.Proto.Schema.FieldPartialUpdateOp,
     json_name: "fieldOps"
+
+  field :rls_principal, 12, type: :string, json_name: "rlsPrincipal"
+  field :skip_rls, 13, type: :bool, json_name: "skipRls"
 end

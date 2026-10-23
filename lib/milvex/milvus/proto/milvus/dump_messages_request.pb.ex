@@ -17,4 +17,5 @@ defmodule Milvex.Milvus.Proto.Milvus.DumpMessagesRequest do
 
   field :start_timetick, 3, type: :uint64, json_name: "startTimetick"
   field :end_timetick, 4, type: :uint64, json_name: "endTimetick"
+  field :include_start_message, 5, type: :bool, json_name: "includeStartMessage"
 end

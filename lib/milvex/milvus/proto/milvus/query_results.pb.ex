@@ -12,4 +12,9 @@ defmodule Milvex.Milvus.Proto.Milvus.QueryResults do
   field :output_fields, 4, repeated: true, type: :string, json_name: "outputFields"
   field :session_ts, 5, type: :uint64, json_name: "sessionTs"
   field :primary_field_name, 6, type: :string, json_name: "primaryFieldName"
+
+  field :element_indices, 7,
+    repeated: true,
+    type: Milvex.Milvus.Proto.Milvus.ElementIndices,
+    json_name: "elementIndices"
 end

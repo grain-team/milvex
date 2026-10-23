@@ -15,4 +15,6 @@ defmodule Milvex.Milvus.Proto.Milvus.InsertRequest do
   field :num_rows, 7, type: :uint32, json_name: "numRows"
   field :schema_timestamp, 8, type: :uint64, json_name: "schemaTimestamp"
   field :namespace, 9, proto3_optional: true, type: :string
+  field :rls_principal, 10, type: :string, json_name: "rlsPrincipal"
+  field :skip_rls, 11, type: :bool, json_name: "skipRls"
 end

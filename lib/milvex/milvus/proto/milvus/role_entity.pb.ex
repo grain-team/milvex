@@ -6,4 +6,5 @@ defmodule Milvex.Milvus.Proto.Milvus.RoleEntity do
   use Protobuf, protoc_gen_elixir_version: "0.15.0", syntax: :proto3
 
   field :name, 1, type: :string
+  field :description, 2, type: :string
 end

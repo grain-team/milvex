@@ -14,4 +14,5 @@ defmodule Milvex.Milvus.Proto.Msg.DeleteRequest do
   field :num_rows, 11, type: :int64, json_name: "numRows"
   field :primary_keys, 12, type: Milvex.Milvus.Proto.Schema.IDs, json_name: "primaryKeys"
   field :segment_id, 13, type: :int64, json_name: "segmentId"
+  field :serialized_expr_plan, 14, type: :bytes, json_name: "serializedExprPlan"
 end

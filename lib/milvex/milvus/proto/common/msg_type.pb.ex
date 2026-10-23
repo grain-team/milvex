@@ -110,6 +110,7 @@ defmodule Milvex.Milvus.Proto.Common.MsgType do
   field :ListPrivilegeGroups, 1612
   field :OperatePrivilegeGroup, 1613
   field :OperatePrivilegeV2, 1614
+  field :AlterRole, 1615
   field :CreateResourceGroup, 1700
   field :DropResourceGroup, 1701
   field :ListResourceGroups, 1702
@@ -124,4 +125,28 @@ defmodule Milvex.Milvus.Proto.Common.MsgType do
   field :DescribeDatabase, 1805
   field :AddCollectionField, 1900
   field :AlterWAL, 2000
+  field :CreateSnapshot, 2100
+  field :DropSnapshot, 2101
+  field :ListSnapshots, 2102
+  field :DescribeSnapshot, 2103
+  field :RestoreSnapshot, 2104
+  field :GetRestoreSnapshotState, 2105
+  field :ListRestoreSnapshotJobs, 2106
+  field :PinSnapshotData, 2107
+  field :UnpinSnapshotData, 2108
+  field :RestoreExternalSnapshot, 2109
+  field :ExportSnapshot, 2110
+  field :AlterCollectionSchema, 2200
+  field :RefreshExternalCollection, 2300
+  field :GetRefreshExternalCollectionProgress, 2301
+  field :ListRefreshExternalCollectionJobs, 2302
+  field :CreateRowPolicy, 2400
+  field :DropRowPolicy, 2401
+  field :ListRowPolicies, 2402
+  field :UpdateRowPolicy, 2403
+  field :SetRLSPrincipalTags, 2404
+  field :GetRLSPrincipalTags, 2405
+  field :ListRLSPrincipals, 2406
+  field :DeleteRLSPrincipalTags, 2407
+  field :GetExportSnapshotState, 2111
 end

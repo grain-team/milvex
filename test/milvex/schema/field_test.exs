@@ -443,7 +443,34 @@ defmodule Milvex.Schema.FieldTest do
     end
   end
 
+  describe "Geometry read-only support" do
+    test "builders still reject Geometry" do
+      assert_raise FunctionClauseError, fn -> apply(Field, :new, ["loc", :geometry]) end
+      assert_raise FunctionClauseError, fn -> apply(Field, :scalar, ["loc", :geometry]) end
+      refute :geometry in Field.data_types()
+      refute :geometry in Field.scalar_types()
+    end
+
+    test "other unsupported proto types remain unknown" do
+      for type <- [:Mol, :Date, :Time, :Decimal] do
+        assert %Field{data_type: :unknown} =
+                 Field.from_proto(%FieldSchema{name: "unsupported", data_type: type})
+      end
+    end
+  end
+
   describe "from_proto/1" do
+    test "roundtrip conversion preserves Geometry fields" do
+      field = Field.from_proto(%FieldSchema{name: "loc", data_type: :Geometry})
+
+      assert %FieldSchema{name: "loc", data_type: :Geometry} = Field.to_proto(field)
+    end
+
+    test "recognizes Geometry fields" do
+      assert %Field{name: "loc", data_type: :geometry} =
+               Field.from_proto(%FieldSchema{name: "loc", data_type: :Geometry})
+    end
+
     test "converts proto to field" do
       proto = %FieldSchema{
         name: "embedding",

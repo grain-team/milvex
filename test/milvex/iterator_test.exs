@@ -560,7 +560,7 @@ defmodule Milvex.IteratorTest do
       params2 = Map.new(req2.query_params, &{&1.key, &1.value})
       assert params2["iterator"] == "True"
       assert params2["limit"] == "3"
-      assert params2["query_iter_last_pk"] == "3"
+      refute Map.has_key?(params2, "query_iter_last_pk")
       assert req2.expr == "(id >= 0) and id > 3"
     end
 

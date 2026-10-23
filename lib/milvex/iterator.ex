@@ -28,8 +28,7 @@ defmodule Milvex.Iterator do
 
   @query_iter_keys %{
     enable: "iterator",
-    limit: "limit",
-    last_pk: "query_iter_last_pk"
+    limit: "limit"
   }
 
   @doc false
@@ -404,24 +403,17 @@ defmodule Milvex.Iterator do
     %{state | pk_cursor: last_pk}
   end
 
+  # Pages advance through the `pk > last` filter in `continuation_expr/1`. The
+  # `query_iter_last_pk` cursor is not sent: Milvus 2.6 ignores it, and Milvus 3
+  # only accepts it together with `query_iter_last_element_offset` for
+  # element-level queries.
   defp build_query_request(state) do
-    base_params = [
+    query_params = [
       %KeyValuePair{key: @query_iter_keys.enable, value: "True"},
       %KeyValuePair{key: @query_iter_keys.limit, value: to_string(state.batch_size)}
     ]
 
-    base_params =
-      case state.pk_cursor do
-        nil ->
-          base_params
-
-        pk ->
-          [
-            %KeyValuePair{key: @query_iter_keys.last_pk, value: to_string(pk)} | base_params
-          ]
-      end
-
-    request = %{state.base_request | query_params: base_params, expr: continuation_expr(state)}
+    request = %{state.base_request | query_params: query_params, expr: continuation_expr(state)}
 
     if state.session_ts && state.session_ts > 0 do
       %{request | guarantee_timestamp: state.session_ts}

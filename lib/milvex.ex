@@ -1583,7 +1583,9 @@ defmodule Milvex do
   end
 
   @doc """
-  Returns the Milvus server version (semantic version string).
+  Returns the raw Milvus server version string, without caching or config overrides.
+
+  See `server_version/2` for the parsed, cached, override-aware version.
 
   ## Returns
 
@@ -1607,6 +1609,24 @@ defmodule Milvex do
       end
     end
   end
+
+  @doc """
+  Returns the parsed Milvus server version.
+
+  Uses the connection's `:server_version` override when configured; otherwise detects
+  and caches the version per channel. Detection accepts RPC options such as `:timeout`.
+  An unparseable version returns an error with code `:server_version_unknown`.
+
+  See `get_version/2` for the raw, uncached server response.
+
+  ## Returns
+
+    - `{:ok, %Version{}}` on success
+    - `{:error, error}` on failure
+  """
+  @spec server_version(GenServer.server(), keyword()) ::
+          {:ok, Version.t()} | {:error, Error.t()}
+  def server_version(conn, opts \\ []), do: Milvex.ServerVersion.get(conn, opts)
 
   @doc """
   Returns the load state of a collection.

@@ -139,13 +139,27 @@ Milvex.Connection.start_link(
   ssl: true,                # Enable SSL/TLS
   ssl_options: [],          # SSL options for transport
   timeout: 30_000,          # Connection timeout in ms
-  pool_size: 1              # Number of gRPC connections (round-robin)
+  pool_size: 1,             # Number of gRPC connections (round-robin)
+  server_version: "3.0.3"  # Skip version detection (optional)
 )
 
 # Or use a URI
 {:ok, config} = Milvex.Config.parse_uri("https://user:pass@milvus.example.com:443/mydb")
 {:ok, conn} = Milvex.Connection.start_link(config)
 ```
+
+### Milvus 2.6 and 3.0 compatibility
+
+Milvex supports Milvus 2.6 and 3.0. `Milvex.server_version(conn)` returns
+`{:ok, %Version{}}`, using the configured override or detection cached per channel.
+`Milvex.get_version(conn)` returns the raw, uncached server string instead.
+
+Version-guarded features return `:server_version_unsupported` on older servers or
+`:server_version_unknown` when detection cannot parse the version. Set the optional
+`server_version` connection option to the actual server version when detection is
+unavailable. Unsupported RPCs return a gRPC UNIMPLEMENTED error (code 12) explaining
+that the operation may require a newer Milvus version. See the
+[error handling guide](guides/error-handling.md) for details.
 
 ## Index Types
 

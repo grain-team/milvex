@@ -8,6 +8,7 @@ defmodule Milvex.ServerVersion do
   when automatic detection is unavailable.
   """
 
+  alias Milvex.Config
   alias Milvex.Connection
   alias Milvex.Milvus.Proto.Milvus.GetVersionRequest
   alias Milvex.Milvus.Proto.Milvus.MilvusService
@@ -67,7 +68,7 @@ defmodule Milvex.ServerVersion do
              MilvusService.Stub,
              :get_version,
              %GetVersionRequest{},
-             opts
+             Config.merge_rpc_opts(config, opts)
            ),
          {:ok, response} <- RPC.with_status_check(response, "GetVersion") do
       case parse(response.version) do

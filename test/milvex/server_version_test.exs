@@ -47,6 +47,23 @@ defmodule Milvex.ServerVersionTest do
     assert :ok = ServerVersion.forget(nil)
   end
 
+  test "detection uses the connection timeout and retry settings", %{
+    channel: channel,
+    config: config
+  } do
+    config = %{config | timeout: 12_000, retry_max_attempts: 2}
+    stub(Connection, :get_channel, fn :conn, _opts -> {:ok, channel, config} end)
+
+    expect(RPC, :call, fn channel_fn, _, :get_version, _, opts ->
+      assert {:ok, ^channel, ^config} = channel_fn.()
+      assert opts[:timeout] == 12_000
+      assert opts[:retry_max_attempts] == 2
+      {:ok, %GetVersionResponse{status: %Status{code: 0}, version: "v3.0.3"}}
+    end)
+
+    assert {:ok, %Version{major: 3}} = ServerVersion.get(:conn)
+  end
+
   test "config override wins even over a cached version", %{channel: channel, config: config} do
     version = Version.parse!("3.0.3")
     :ets.insert(:milvex_server_versions, {channel.ref, Version.parse!("2.6.6")})

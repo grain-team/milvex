@@ -228,6 +228,12 @@ defmodule Milvex.Config do
     |> parse()
   end
 
+  def parse(%{server_version: %Version{} = version} = config) do
+    with {:ok, validated} <- parse(Map.delete(config, :server_version)) do
+      {:ok, %{validated | server_version: version}}
+    end
+  end
+
   def parse(config) when is_map(config) do
     config =
       config

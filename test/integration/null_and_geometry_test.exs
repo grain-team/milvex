@@ -8,21 +8,26 @@ defmodule Milvex.Integration.NullAndGeometryTest do
 
   @moduletag :integration
 
-  test "nullable scalars retain null positions in query and search", %{conn: conn} do
-    name = unique_collection_name("null_readback")
-    on_exit(fn -> cleanup_collection(conn, name) end)
+  defmodule NullReadback do
+    use Milvex.Collection
 
-    schema =
-      Schema.build!(
-        name: name,
-        fields: [
-          Field.primary_key("id", :int64, auto_id: false),
-          Field.varchar("title", 256, nullable: true),
-          Field.scalar("count", :int64, nullable: true),
-          Field.timestamp("updated_at", nullable: true),
-          Field.vector("embedding", 4)
-        ]
-      )
+    collection do
+      name "null_readback_#{System.unique_integer([:positive])}"
+
+      fields do
+        primary_key :id, :int64, auto_id: false
+        varchar :title, 256, nullable: true
+        scalar :count, :int64, nullable: true
+        timestamp :updated_at, nullable: true
+        vector :embedding, 4
+      end
+    end
+  end
+
+  test "nullable scalars retain null positions in query and search", %{conn: conn} do
+    name = Milvex.Collection.collection_name(NullReadback)
+    on_exit(fn -> cleanup_collection(conn, name) end)
+    schema = Milvex.Collection.to_schema(NullReadback)
 
     assert :ok = Milvex.create_collection(conn, name, schema)
 
@@ -73,7 +78,7 @@ defmodule Milvex.Integration.NullAndGeometryTest do
     assert Enum.sort_by(result.rows, & &1["id"]) == expected
 
     assert {:ok, %{hits: [hits]}} =
-             Milvex.search(conn, name, [[1.0, 0.0, 0.0, 0.0]],
+             Milvex.search(conn, NullReadback, [[1.0, 0.0, 0.0, 0.0]],
                vector_field: "embedding",
                top_k: 3,
                output_fields: fields,

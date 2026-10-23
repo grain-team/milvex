@@ -4,6 +4,12 @@ defmodule Milvex.ConfigServerVersionTest do
   alias Milvex.Config
   alias Milvex.Errors.Invalid
 
+  test "re-parses a normalized config preserving its server version" do
+    assert {:ok, config} = Config.parse(server_version: "3.0.4")
+    assert %Version{} = version = config.server_version
+    assert {:ok, %{server_version: ^version}} = Config.parse(config)
+  end
+
   test "normalizes an optional server version and rejects invalid overrides" do
     assert {:ok, %{server_version: nil}} = Config.parse([])
 

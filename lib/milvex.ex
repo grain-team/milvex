@@ -914,7 +914,9 @@ defmodule Milvex do
     - `:partition_names` - List of partition names to search
     - `:db_name` - Database name (default: "")
     - `:consistency_level` - Consistency level (default: `:Bounded`)
-    - `:highlight` - A `Milvex.Highlighter.t()` to enable search result highlighting
+    - `:highlight` - A `Milvex.Highlighter.t()` to enable search result highlighting.
+      Requires Milvus 2.6.8+; older servers return
+      `{:error, %Milvex.Errors.Invalid{code: :server_version_unsupported}}`
     - `:expr_params` - Template parameters map for the filter expression
     - `:offset` - Number of results to skip for pagination (limit + offset <= 16384)
     - `:group_by_field` - Scalar field name to group results by
@@ -986,6 +988,7 @@ defmodule Milvex do
     with :ok <- validate_offset_limit_cap(opts, :search),
          {:ok, vector_field} <- require_option(opts, :vector_field),
          {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts),
+         :ok <- Milvex.Internal.require_highlight_support(conn, opts),
          {:ok, schema} <- resolve_schema(conn, collection, collection_name, opts),
          {:ok, field, is_nested} <- find_vector_field(schema, vector_field),
          {:ok, placeholder_bytes} <- build_ann_placeholder_group(vectors, field, is_nested) do

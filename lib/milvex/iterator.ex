@@ -101,6 +101,8 @@ defmodule Milvex.Iterator do
 
     {:ok, channel_fn, rpc_opts} = resolve_channel!(conn, opts)
 
+    with {:error, error} <- Internal.require_highlight_support(conn, opts), do: raise(error)
+
     {:ok, schema} =
       Internal.resolve_schema(
         conn,

@@ -15,6 +15,7 @@ defmodule Milvex.SearchTest do
   alias Milvex.Milvus.Proto.Common.KeyValuePair
   alias Milvex.Milvus.Proto.Common.Status
   alias Milvex.Milvus.Proto.Milvus.DescribeCollectionResponse
+  alias Milvex.Milvus.Proto.Milvus.GetVersionResponse
   alias Milvex.Milvus.Proto.Milvus.SearchResults
   alias Milvex.Milvus.Proto.Schema.CollectionSchema
   alias Milvex.Milvus.Proto.Schema.FieldSchema
@@ -89,6 +90,31 @@ defmodule Milvex.SearchTest do
   end
 
   describe "search/4 with highlight option" do
+    test "returns a version error instead of searching when the server is older than 2.6.8" do
+      {:ok, highlighter} = Highlighter.lexical("text_field")
+      channel = %GRPC.Channel{host: "localhost", port: 19_530, ref: make_ref()}
+      on_exit(fn -> Milvex.ServerVersion.forget(channel) end)
+
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, channel, @config} end)
+
+      stub(RPC, :call, fn _channel, _stub, method, _request, _opts ->
+        case method do
+          :describe_collection ->
+            @describe_response
+
+          :get_version ->
+            {:ok, %GetVersionResponse{status: %Status{code: 0}, version: "2.6.6"}}
+        end
+      end)
+
+      assert {:error,
+              %Milvex.Errors.Invalid{code: :server_version_unsupported, field: "highlight"}} =
+               Milvex.search(:conn, "test", [[0.1, 0.2, 0.3, 0.4]],
+                 vector_field: "embedding",
+                 highlight: highlighter
+               )
+    end
+
     test "includes highlighter in SearchRequest when highlight option is provided" do
       {:ok, highlighter} = Highlighter.lexical("text_field")
       test_pid = self()
@@ -103,6 +129,9 @@ defmodule Milvex.SearchTest do
           :search ->
             send(test_pid, {:search_request, request})
             @search_response
+
+          :get_version ->
+            {:ok, %GetVersionResponse{status: %Status{code: 0}, version: "2.6.8"}}
         end
       end)
 
@@ -161,6 +190,9 @@ defmodule Milvex.SearchTest do
           :search ->
             send(test_pid, {:search_request, request})
             @search_response
+
+          :get_version ->
+            {:ok, %GetVersionResponse{status: %Status{code: 0}, version: "2.6.8"}}
         end
       end)
 

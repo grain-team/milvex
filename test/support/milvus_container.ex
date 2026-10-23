@@ -10,8 +10,7 @@ defmodule Milvex.MilvusContainer do
   alias DockerEngineAPI.Model.NetworkCreateRequest
 
   @etcd_image "quay.io/coreos/etcd:v3.5.18"
-  @minio_image "minio/minio:RELEASE.2024-12-18T13-15-44Z"
-  @milvus_image "milvusdb/milvus:v2.6.6"
+  @minio_image "milvusdb/minio:RELEASE.2024-12-18T13-15-44Z"
 
   @grpc_port 19_530
   @network_prefix "milvex-test-"
@@ -140,7 +139,7 @@ defmodule Milvex.MilvusContainer do
 
   defp start_milvus(network_id, etcd_ip, minio_ip) do
     container =
-      Container.new(@milvus_image)
+      Container.new(System.get_env("MILVUS_IMAGE", "milvusdb/milvus:v2.6.6"))
       |> Container.with_exposed_port(@grpc_port)
       |> Container.with_exposed_port(9091)
       |> Container.with_network_mode(network_id)

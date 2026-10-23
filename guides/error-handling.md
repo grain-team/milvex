@@ -6,7 +6,7 @@ Milvex uses [Splode](https://hexdocs.pm/splode) for structured error handling. A
 
 ### Milvex.Errors.Invalid
 
-Validation and input errors. Raised when user-provided data fails validation.
+Validation, input, and result decoding errors.
 
 **Fields:**
 - `field` - The field that failed validation (optional)
@@ -27,6 +27,15 @@ Validation and input errors. Raised when user-provided data fails validation.
   code: :invalid_dimension
 }
 ```
+
+**Result decoding codes:**
+- `:unsupported_data_type` - A returned column uses an unsupported data variant. To read the remaining fields, exclude it from `output_fields`.
+- `:malformed_field_data` - A returned column has an inconsistent `valid_data` null mask and value count.
+
+`Milvex.query/4`, `Milvex.search/4`, and `Milvex.hybrid_search/5` return
+`{:error, %Milvex.Errors.Invalid{}}` for these decoding failures. The error's
+`field` identifies the affected column. Direct result parsers and streams raise
+the error instead.
 
 ### Milvex.Errors.Connection
 

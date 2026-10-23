@@ -8,6 +8,9 @@ defmodule MilvexClientTest do
   alias Milvex.Data
   alias Milvex.Error
   alias Milvex.Index
+  alias Milvex.Milvus.Proto.Schema.FieldData
+  alias Milvex.Milvus.Proto.Schema.MolArray
+  alias Milvex.Milvus.Proto.Schema.ScalarField
   alias Milvex.Ranker
   alias Milvex.RPC
   alias Milvex.Schema
@@ -53,6 +56,61 @@ defmodule MilvexClientTest do
   setup do
     stub(Connection, :get_config, fn _conn, _opts -> {:ok, @config} end)
     :ok
+  end
+
+  test "query returns unsupported column decode errors" do
+    stub(Connection, :get_channel, fn _, _ -> {:ok, @channel, @config} end)
+
+    expect(RPC, :call, fn _, _, :query, _, _ ->
+      {:ok,
+       %QueryResults{
+         status: %Status{code: 0},
+         fields_data: [
+           %FieldData{
+             field_name: "molecule",
+             field:
+               {:scalars,
+                %ScalarField{
+                  data: {:mol_data, %MolArray{data: ["mol"]}}
+                }}
+           }
+         ]
+       }}
+    end)
+
+    assert {:error, %Milvex.Errors.Invalid{code: :unsupported_data_type, field: "molecule"}} =
+             Milvex.query(:conn, "test", "")
+  end
+
+  test "query returns malformed column decode errors" do
+    stub(Connection, :get_channel, fn _, _ -> {:ok, @channel, @config} end)
+
+    expect(RPC, :call, fn _, _, :query, _, _ ->
+      {:ok,
+       %QueryResults{
+         status: %Status{code: 0},
+         fields_data: [
+           %FieldData{
+             field_name: "value",
+             valid_data: [true, true],
+             field: {:scalars, %ScalarField{data: {:long_data, %LongArray{data: [42]}}}}
+           }
+         ]
+       }}
+    end)
+
+    assert {:error, %Milvex.Errors.Invalid{code: :malformed_field_data, field: "value"}} =
+             Milvex.query(:conn, "test", "")
+  end
+
+  test "query does not rescue unrelated decoding exceptions" do
+    stub(Connection, :get_channel, fn _, _ -> {:ok, @channel, @config} end)
+
+    expect(RPC, :call, fn _, _, :query, _, _ ->
+      {:ok, %QueryResults{status: %Status{code: 0}, fields_data: [nil]}}
+    end)
+
+    assert_raise FunctionClauseError, fn -> Milvex.query(:conn, "test", "") end
   end
 
   describe "has_collection/3" do

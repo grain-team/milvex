@@ -66,6 +66,7 @@ defmodule Milvex.Connection do
   alias Milvex.Config
   alias Milvex.ConnectionPool
   alias Milvex.Errors
+  alias Milvex.ServerVersion
   alias Milvex.Telemetry
 
   # Delay before retrying a failed proactive recycle. Must stay well below the
@@ -326,6 +327,7 @@ defmodule Milvex.Connection do
   end
 
   def connected(:info, {:DOWN, ref, :process, _pid, reason}, %{conn_monitor_ref: ref} = data) do
+    ServerVersion.forget(data.channel)
     Telemetry.connection_disconnect(data.config.host, data.config.port, reason)
 
     {:next_state, :reconnecting,
@@ -621,6 +623,8 @@ defmodule Milvex.Connection do
 
   defp close_channel(%{adapter_payload: %{conn_pid: conn_pid}} = channel)
        when is_pid(conn_pid) do
+    ServerVersion.forget(channel)
+
     if Process.alive?(conn_pid) do
       GRPC.Stub.disconnect(channel)
     else
@@ -631,7 +635,10 @@ defmodule Milvex.Connection do
     :error, _ -> {:ok, channel}
   end
 
-  defp close_channel(channel), do: {:ok, channel}
+  defp close_channel(channel) do
+    ServerVersion.forget(channel)
+    {:ok, channel}
+  end
 end
 
 defimpl Inspect, for: Milvex.Connection do

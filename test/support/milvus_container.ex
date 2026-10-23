@@ -137,9 +137,12 @@ defmodule Milvex.MilvusContainer do
     Testcontainers.start_container(container)
   end
 
+  @doc "Milvus image under test: `MILVUS_IMAGE`, or the default 2.6 release."
+  def image, do: System.get_env("MILVUS_IMAGE", "milvusdb/milvus:v2.6.25")
+
   defp start_milvus(network_id, etcd_ip, minio_ip) do
     container =
-      Container.new(System.get_env("MILVUS_IMAGE", "milvusdb/milvus:v2.6.6"))
+      Container.new(image())
       |> Container.with_exposed_port(@grpc_port)
       |> Container.with_exposed_port(9091)
       |> Container.with_network_mode(network_id)

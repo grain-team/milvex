@@ -189,7 +189,7 @@ defmodule Milvex.RPC do
 
   A `Milvex.Error.t()` representing the gRPC error.
   """
-  @spec grpc_error_to_error(GRPC.RPCError.t(), String.t()) :: Grpc.t()
+  @spec grpc_error_to_error(Exception.t(), String.t()) :: Grpc.t()
   def grpc_error_to_error(%GRPC.RPCError{status: status, message: message}, operation) do
     Grpc.exception(
       operation: operation,

@@ -123,8 +123,8 @@ defmodule Milvex.Integration.HybridSearchTest do
       refute Enum.empty?(results.hits)
     end
 
-    test "searches with decay ranker on timestamptz field", %{conn: conn} do
-      collection = "hybrid_search_decay_tz_test"
+    test "searches with decay ranker on an int64 epoch-seconds field", %{conn: conn} do
+      collection = "hybrid_search_decay_epoch_test"
 
       on_exit(fn ->
         Milvex.drop_collection(conn, collection)
@@ -136,7 +136,7 @@ defmodule Milvex.Integration.HybridSearchTest do
           fields: [
             Field.primary_key("id", :int64, auto_id: true),
             Field.varchar("title", 512),
-            Field.timestamp("created_at"),
+            Field.scalar("created_at", :int64),
             Field.vector("text_embedding", 4),
             Field.vector("image_embedding", 4)
           ]
@@ -154,19 +154,19 @@ defmodule Milvex.Integration.HybridSearchTest do
       data = [
         %{
           title: "Recent",
-          created_at: now,
+          created_at: DateTime.to_unix(now),
           text_embedding: [1.0, 0.0, 0.0, 0.0],
           image_embedding: [0.0, 1.0, 0.0, 0.0]
         },
         %{
           title: "Yesterday",
-          created_at: one_day_ago,
+          created_at: DateTime.to_unix(one_day_ago),
           text_embedding: [0.0, 1.0, 0.0, 0.0],
           image_embedding: [0.0, 0.0, 1.0, 0.0]
         },
         %{
           title: "Old",
-          created_at: two_days_ago,
+          created_at: DateTime.to_unix(two_days_ago),
           text_embedding: [0.0, 0.0, 1.0, 0.0],
           image_embedding: [1.0, 0.0, 0.0, 0.0]
         }

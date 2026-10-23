@@ -80,7 +80,9 @@ defmodule Milvex.Ranker do
 
   ## Options
 
-    - `:field` - (required) Name of the numeric field
+    - `:field` - (required) Name of a numeric field (`:int8` to `:int64`,
+      `:float`, `:double`). Milvus 3 rejects `:timestamp` fields; store epoch
+      seconds in an `:int64` field for time decay
     - `:origin` - (required) Center point (integer)
     - `:scale` - (required) Distance from origin where score = decay (positive integer)
     - `:offset` - Zone around origin with full score (default: 0)

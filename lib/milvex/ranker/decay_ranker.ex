@@ -6,6 +6,10 @@ defmodule Milvex.Ranker.DecayRanker do
   scoring documents higher when the field value is closer to the origin.
   Useful for time-based relevance decay.
 
+  The field must be numeric (`:int8` to `:int64`, `:float`, `:double`). Milvus 3
+  rejects `:timestamp` (Timestamptz) fields, so for time decay store epoch
+  seconds in an `:int64` field and use an epoch-seconds `:origin`.
+
   ## Fields
 
     - `:function` - Decay curve: `:gauss`, `:exp`, or `:linear`

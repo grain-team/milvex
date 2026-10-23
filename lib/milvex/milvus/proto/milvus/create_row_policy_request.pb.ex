@@ -10,8 +10,14 @@ defmodule Milvex.Milvus.Proto.Milvus.CreateRowPolicyRequest do
   field :collection_name, 3, type: :string, json_name: "collectionName"
   field :policy_name, 4, type: :string, json_name: "policyName"
   field :actions, 5, repeated: true, type: Milvex.Milvus.Proto.Milvus.RowPolicyAction, enum: true
-  field :roles, 6, repeated: true, type: :string
+  field :roles, 6, repeated: true, type: :string, deprecated: true
   field :using_expr, 7, type: :string, json_name: "usingExpr"
   field :check_expr, 8, type: :string, json_name: "checkExpr"
   field :description, 9, type: :string
+
+  field :policy_type, 10,
+    proto3_optional: true,
+    type: Milvex.Milvus.Proto.Milvus.RowPolicyType,
+    json_name: "policyType",
+    enum: true
 end

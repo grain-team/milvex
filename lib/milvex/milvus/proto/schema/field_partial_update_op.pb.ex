@@ -19,4 +19,5 @@ defmodule Milvex.Milvus.Proto.Schema.FieldPartialUpdateOp do
 
   field :field_name, 1, type: :string, json_name: "fieldName"
   field :op, 2, type: Milvex.Milvus.Proto.Schema.FieldPartialUpdateOp.OpType, enum: true
+  field :path, 3, type: :string
 end

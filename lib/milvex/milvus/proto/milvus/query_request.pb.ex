@@ -31,4 +31,6 @@ defmodule Milvex.Milvus.Proto.Milvus.QueryRequest do
     map: true
 
   field :namespace, 14, proto3_optional: true, type: :string
+  field :rls_principal, 15, type: :string, json_name: "rlsPrincipal"
+  field :skip_rls, 16, type: :bool, json_name: "skipRls"
 end

@@ -77,5 +77,20 @@ defmodule Milvex.Milvus.Proto.Common.ObjectPrivilege do
   field :PrivilegeRemoveFileResource, 73
   field :PrivilegeListFileResources, 74
   field :PrivilegeUpdateReplicateConfiguration, 78
+  field :PrivilegeCreateSnapshot, 79
+  field :PrivilegeDropSnapshot, 80
+  field :PrivilegeDescribeSnapshot, 81
+  field :PrivilegeListSnapshots, 82
+  field :PrivilegeRestoreSnapshot, 83
+  field :PrivilegeAlterCollectionSchema, 84
   field :PrivilegeGetReplicateConfiguration, 85
+  field :PrivilegeRefreshExternalCollection, 86
+  field :PrivilegePinSnapshotData, 87
+  field :PrivilegeUnpinSnapshotData, 88
+  field :PrivilegeRestoreExternalSnapshot, 89
+  field :PrivilegeExportSnapshot, 90
+  field :PrivilegeSkipRLS, 91
+  field :PrivilegeViewRLS, 92
+  field :PrivilegeManageRLS, 93
+  field :PrivilegeImportBinlog, 94
 end

@@ -48,4 +48,21 @@ defmodule Milvex.Milvus.Proto.Schema.ScalarField do
     type: Milvex.Milvus.Proto.Schema.GeometryWktArray,
     json_name: "geometryWktData",
     oneof: 0
+
+  field :mol_data, 13, type: Milvex.Milvus.Proto.Schema.MolArray, json_name: "molData", oneof: 0
+
+  field :mol_smiles_data, 14,
+    type: Milvex.Milvus.Proto.Schema.MolSmilesArray,
+    json_name: "molSmilesData",
+    oneof: 0
+
+  field :date_data, 15,
+    type: Milvex.Milvus.Proto.Schema.DateArray,
+    json_name: "dateData",
+    oneof: 0
+
+  field :time_data, 16,
+    type: Milvex.Milvus.Proto.Schema.TimeArray,
+    json_name: "timeData",
+    oneof: 0
 end

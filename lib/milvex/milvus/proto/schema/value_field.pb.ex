@@ -11,4 +11,6 @@ defmodule Milvex.Milvus.Proto.Schema.ValueField do
   field :string_data, 6, type: :string, json_name: "stringData", oneof: 0
   field :bytes_data, 7, type: :bytes, json_name: "bytesData", oneof: 0
   field :timestamptz_data, 8, type: :int64, json_name: "timestamptzData", oneof: 0
+  field :date_data, 9, type: :int32, json_name: "dateData", oneof: 0
+  field :time_data, 10, type: :int64, json_name: "timeData", oneof: 0
 end

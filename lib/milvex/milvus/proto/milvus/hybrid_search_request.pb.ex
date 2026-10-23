@@ -29,4 +29,12 @@ defmodule Milvex.Milvus.Proto.Milvus.HybridSearchRequest do
     json_name: "functionScore"
 
   field :namespace, 14, proto3_optional: true, type: :string
+
+  field :function_chains, 15,
+    repeated: true,
+    type: Milvex.Milvus.Proto.Schema.FunctionChain,
+    json_name: "functionChains"
+
+  field :rls_principal, 16, type: :string, json_name: "rlsPrincipal"
+  field :skip_rls, 17, type: :bool, json_name: "skipRls"
 end

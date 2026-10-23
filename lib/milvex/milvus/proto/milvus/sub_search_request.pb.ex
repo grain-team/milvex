@@ -19,4 +19,9 @@ defmodule Milvex.Milvus.Proto.Milvus.SubSearchRequest do
     map: true
 
   field :namespace, 7, proto3_optional: true, type: :string
+
+  field :function_chains, 8,
+    repeated: true,
+    type: Milvex.Milvus.Proto.Schema.FunctionChain,
+    json_name: "functionChains"
 end

@@ -18,4 +18,8 @@ defmodule Milvex.Milvus.Proto.Milvus.DeleteRequest do
     type: Milvex.Milvus.Proto.Milvus.DeleteRequest.ExprTemplateValuesEntry,
     json_name: "exprTemplateValues",
     map: true
+
+  field :namespace, 9, proto3_optional: true, type: :string
+  field :rls_principal, 10, type: :string, json_name: "rlsPrincipal"
+  field :skip_rls, 11, type: :bool, json_name: "skipRls"
 end

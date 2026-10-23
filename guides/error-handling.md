@@ -145,27 +145,19 @@ case Milvex.search(conn, "movies", vectors, vector_field: "embedding") do
 end
 ```
 
-## Using Bang Functions
+## Raising Instead of Returning Errors
 
-All Milvex operations have bang variants that raise on error:
+Milvex API operations return `{:error, error}` and do not raise. Errors are exceptions, so when you want a failure to halt execution (scripts, one-off tasks), raise them yourself:
 
 ```elixir
-# Returns {:ok, result} or {:error, error}
-{:ok, results} = Milvex.search(conn, "movies", vectors, vector_field: "embedding")
-
-# Raises on error
-results = Milvex.search!(conn, "movies", vectors, vector_field: "embedding")
+results =
+  case Milvex.search(conn, "movies", vectors, vector_field: "embedding") do
+    {:ok, results} -> results
+    {:error, error} -> raise error
+  end
 ```
 
-Use bang functions when:
-- Errors should halt execution
-- In scripts or one-off operations
-- When the calling code has a `try/rescue` block
-
-Use regular functions when:
-- You need to handle specific error cases
-- Building resilient applications
-- Implementing retry logic
+Builders such as `Milvex.Schema.build!/1`, `Milvex.Data.from_rows!/3` and `Milvex.Index.validate!/1` do have raising variants.
 
 ## Error Messages
 

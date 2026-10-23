@@ -204,7 +204,7 @@ Metric types: `:l2`, `:ip`, `:cosine`, `:hamming`, `:jaccard`
 
 ## Error Handling
 
-All functions return `{:ok, result}` or `{:error, error}`. Bang variants (e.g., `insert!`) raise on error.
+API functions return `:ok`, `{:ok, result}`, or `{:error, error}`. They do not raise; match on the result or use `with`.
 
 ```elixir
 case Milvex.search(conn, "movies", vectors, vector_field: "embedding") do

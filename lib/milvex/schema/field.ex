@@ -62,6 +62,7 @@ defmodule Milvex.Schema.Field do
           | :json
           | :text
           | :timestamp
+          | :geometry
           | :array
           | :struct
           | :array_of_struct
@@ -804,6 +805,7 @@ defmodule Milvex.Schema.Field do
   defp data_type_to_proto(:bfloat16_vector), do: :BFloat16Vector
   defp data_type_to_proto(:sparse_float_vector), do: :SparseFloatVector
   defp data_type_to_proto(:int8_vector), do: :Int8Vector
+  defp data_type_to_proto(:geometry), do: :Geometry
 
   defp data_type_from_proto(:Bool), do: :bool
   defp data_type_from_proto(:Int8), do: :int8
@@ -825,6 +827,7 @@ defmodule Milvex.Schema.Field do
   defp data_type_from_proto(:BFloat16Vector), do: :bfloat16_vector
   defp data_type_from_proto(:SparseFloatVector), do: :sparse_float_vector
   defp data_type_from_proto(:Int8Vector), do: :int8_vector
+  defp data_type_from_proto(:Geometry), do: :geometry
   defp data_type_from_proto(_), do: :unknown
 
   @doc """

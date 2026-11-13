@@ -1754,9 +1754,9 @@ defmodule Milvex do
   end
 
   @doc """
-  Adds a single field to an existing collection (Milvus < 2.6 path).
+  Adds a single field to an existing collection (Milvus < 3.0 path).
 
-  Newer Milvus versions can use `alter_collection_schema/3` for batch
+  Milvus 3.0+ can use `alter_collection_schema/3` for batch
   add/drop. The field MUST be nullable or have a default; PK and vector
   fields cannot be added this way.
 
@@ -1798,7 +1798,10 @@ defmodule Milvex do
   end
 
   @doc """
-  Atomically adds and/or drops fields on a collection (Milvus 2.6+).
+  Atomically adds and/or drops fields on a collection (Milvus 3.0+).
+
+  Older servers do not implement this RPC and return
+  `{:error, %Milvex.Errors.Grpc{code: 12}}`.
 
   Either `:add_fields` (with optional `:add_functions`) or `:drop_fields`
   may be supplied — the request carries a oneof `action`, so a single call

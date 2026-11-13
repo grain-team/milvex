@@ -6,7 +6,7 @@ Milvex uses [Splode](https://hexdocs.pm/splode) for structured error handling. A
 
 ### Milvex.Errors.Invalid
 
-Validation and input errors. Raised when user-provided data fails validation.
+Validation, input, and result decoding errors.
 
 **Fields:**
 - `field` - The field that failed validation (optional)
@@ -27,6 +27,23 @@ Validation and input errors. Raised when user-provided data fails validation.
   code: :invalid_dimension
 }
 ```
+
+**Result decoding codes:**
+- `:unsupported_data_type` - A returned column uses an unsupported data variant. To read the remaining fields, exclude it from `output_fields`.
+- `:malformed_field_data` - A returned column has an inconsistent `valid_data` null mask and value count.
+
+`Milvex.query/4`, `Milvex.search/4`, and `Milvex.hybrid_search/5` return
+`{:error, %Milvex.Errors.Invalid{}}` for these decoding failures. The error's
+`field` identifies the affected column. Direct result parsers and streams raise
+the error instead.
+
+**Compatibility guard codes:**
+- `:server_version_unsupported` - The connected server does not meet a feature's version requirement. The message includes the required and connected versions.
+- `:server_version_unknown` - The detected version could not be parsed. Set `server_version: "3.0.3"` in the connection config, using the actual server version, when automatic detection is unavailable.
+
+For guarded features, `field` identifies the feature. `Milvex.server_version/2`
+returns the parsed, cached, override-aware version; `Milvex.get_version/2` returns
+the raw server string.
 
 ### Milvex.Errors.Connection
 
@@ -77,6 +94,18 @@ Server-side errors from Milvus or gRPC layer.
 }
 ```
 
+gRPC UNIMPLEMENTED (code 12) reports:
+
+```text
+connected Milvus server (<version> | version unknown) does not support <op>; it may require a newer Milvus version
+```
+
+The parenthesized value includes the server version only when it has already been
+detected and cached for that connection (for example, after `Milvex.server_version/2`
+or a version-gated call); otherwise it says `version unknown`. The error's `details`
+contains `:grpc_status`, the original `:grpc_message`, and `:server_version`
+(`Version.t()` or `nil`).
+
 ### Milvex.Errors.Unknown
 
 Catch-all for unexpected errors.
@@ -116,27 +145,19 @@ case Milvex.search(conn, "movies", vectors, vector_field: "embedding") do
 end
 ```
 
-## Using Bang Functions
+## Raising Instead of Returning Errors
 
-All Milvex operations have bang variants that raise on error:
+Milvex API operations return `{:error, error}` and do not raise. Errors are exceptions, so when you want a failure to halt execution (scripts, one-off tasks), raise them yourself:
 
 ```elixir
-# Returns {:ok, result} or {:error, error}
-{:ok, results} = Milvex.search(conn, "movies", vectors, vector_field: "embedding")
-
-# Raises on error
-results = Milvex.search!(conn, "movies", vectors, vector_field: "embedding")
+results =
+  case Milvex.search(conn, "movies", vectors, vector_field: "embedding") do
+    {:ok, results} -> results
+    {:error, error} -> raise error
+  end
 ```
 
-Use bang functions when:
-- Errors should halt execution
-- In scripts or one-off operations
-- When the calling code has a `try/rescue` block
-
-Use regular functions when:
-- You need to handle specific error cases
-- Building resilient applications
-- Implementing retry logic
+Builders such as `Milvex.Schema.build!/1`, `Milvex.Data.from_rows!/3` and `Milvex.Index.validate!/1` do have raising variants.
 
 ## Error Messages
 

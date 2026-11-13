@@ -4,6 +4,7 @@ defmodule Milvex.Application do
 
   @doc false
   def start(_type, _args) do
+    Milvex.ServerVersion.create_table()
     children = [] ++ dev_children()
 
     opts = [strategy: :one_for_one, name: Milvex.Supervisor]

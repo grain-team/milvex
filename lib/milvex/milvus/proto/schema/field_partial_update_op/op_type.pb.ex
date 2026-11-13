@@ -4,4 +4,5 @@ defmodule Milvex.Milvus.Proto.Schema.FieldPartialUpdateOp.OpType do
   field :REPLACE, 0
   field :ARRAY_APPEND, 1
   field :ARRAY_REMOVE, 2
+  field :PATH_REPLACE, 3
 end

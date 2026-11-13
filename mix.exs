@@ -11,6 +11,16 @@ defmodule Milvex.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       test_coverage: [tool: ExCoveralls],
       start_permanent: Mix.env() == :prod,
+      # hackney 1.x is test-only via testcontainers (pins ~> 1.20); fixes exist only in hackney 4.x.
+      hex: [
+        ignore_advisories: [
+          "EEF-CVE-2026-115693",
+          "EEF-CVE-2026-47071",
+          "EEF-CVE-2026-47075",
+          "EEF-CVE-2026-47069",
+          "EEF-CVE-2026-47076"
+        ]
+      ],
       dialyzer: [
         plt_core_path: "_plts/core",
         plt_add_apps: [:mix]
@@ -123,7 +133,7 @@ defmodule Milvex.MixProject do
       {:mimic, "~> 2.2", only: :test},
       {:mint, "~> 1.7", optional: true},
       {:mix_audit, ">= 0.0.0", only: [:dev, :test], runtime: false},
-      {:nx, "~> 0.10", optional: true},
+      {:nx, "~> 1.0", optional: true},
       {:protobuf, "~> 0.15"},
       {:recode, "~> 0.8", only: [:dev], runtime: false},
       {:spark, "~> 2.3"},

@@ -16,6 +16,55 @@ defmodule Milvex.SearchResultTest do
   alias Milvex.Milvus.Proto.Schema.StringArray
   alias Milvex.Milvus.Proto.Schema.VectorField
 
+  test "nullable output column preserves null rows" do
+    proto = %SearchResults{
+      results: %SearchResultData{
+        num_queries: 1,
+        top_k: 2,
+        topks: [2],
+        ids: %IDs{id_field: {:int_id, %LongArray{data: [1, 2]}}},
+        scores: [0.9, 0.8],
+        fields_data: [
+          %FieldData{
+            field_name: "value",
+            type: :Int64,
+            valid_data: [true, false],
+            field: {:scalars, %ScalarField{data: {:long_data, %LongArray{data: [42]}}}}
+          }
+        ]
+      }
+    }
+
+    result = SearchResult.from_proto(proto)
+    assert [[%Hit{fields: %{"value" => 42}}, %Hit{fields: %{"value" => nil}}]] = result.hits
+  end
+
+  test "unsupported output column raises Invalid" do
+    proto = %SearchResults{
+      results: %SearchResultData{
+        num_queries: 1,
+        top_k: 2,
+        topks: [2],
+        ids: %IDs{id_field: {:int_id, %LongArray{data: [1, 2]}}},
+        scores: [0.9, 0.8],
+        fields_data: [
+          %FieldData{
+            field_name: "molecule",
+            field:
+              {:scalars,
+               %ScalarField{
+                 data: {:mol_data, %Milvex.Milvus.Proto.Schema.MolArray{data: ["mol"]}}
+               }}
+          }
+        ]
+      }
+    }
+
+    error = assert_raise Milvex.Errors.Invalid, fn -> SearchResult.from_proto(proto) end
+    assert error.code == :unsupported_data_type
+    assert error.field == "molecule"
+  end
+
   describe "from_proto/1" do
     test "parses nil results" do
       proto = %SearchResults{

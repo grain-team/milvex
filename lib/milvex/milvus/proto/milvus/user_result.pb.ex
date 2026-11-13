@@ -3,4 +3,5 @@ defmodule Milvex.Milvus.Proto.Milvus.UserResult do
 
   field :user, 1, type: Milvex.Milvus.Proto.Milvus.UserEntity
   field :roles, 2, repeated: true, type: Milvex.Milvus.Proto.Milvus.RoleEntity
+  field :description, 3, type: :string
 end

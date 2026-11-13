@@ -286,8 +286,7 @@ defmodule Milvex.AlterTest do
 
         {:ok,
          %AlterCollectionSchemaResponse{
-           alter_status: %Status{code: 0},
-           index_status: %Status{code: 0}
+           alter_status: %Status{code: 0}
          }}
       end)
 
@@ -301,12 +300,11 @@ defmodule Milvex.AlterTest do
       expect(RPC, :call, fn _, _, :alter_collection_schema, request, _opts ->
         assert %{op: {:drop_request, drop_request}} = request.action
 
-        assert %{field_identifier: {:field_name, "legacy"}} = drop_request
+        assert %{identifier: {:field_name, "legacy"}} = drop_request
 
         {:ok,
          %AlterCollectionSchemaResponse{
-           alter_status: %Status{code: 0},
-           index_status: %Status{code: 0}
+           alter_status: %Status{code: 0}
          }}
       end)
 
@@ -324,8 +322,7 @@ defmodule Milvex.AlterTest do
 
         {:ok,
          %AlterCollectionSchemaResponse{
-           alter_status: %Status{code: 0},
-           index_status: %Status{code: 0}
+           alter_status: %Status{code: 0}
          }}
       end)
 
@@ -342,23 +339,7 @@ defmodule Milvex.AlterTest do
       expect(RPC, :call, fn _, _, :alter_collection_schema, _req, _opts ->
         {:ok,
          %AlterCollectionSchemaResponse{
-           alter_status: %Status{code: 5, reason: "alter failed"},
-           index_status: %Status{code: 0}
-         }}
-      end)
-
-      assert {:error, %Milvex.Errors.Grpc{}} =
-               Milvex.alter_collection_schema(:fake_conn, "movies", drop_fields: ["legacy"])
-    end
-
-    test "returns error when index_status is non-zero" do
-      stub_channel()
-
-      expect(RPC, :call, fn _, _, :alter_collection_schema, _req, _opts ->
-        {:ok,
-         %AlterCollectionSchemaResponse{
-           alter_status: %Status{code: 0},
-           index_status: %Status{code: 7, reason: "index failed"}
+           alter_status: %Status{code: 5, reason: "alter failed"}
          }}
       end)
 
@@ -403,8 +384,7 @@ defmodule Milvex.AlterTest do
 
         {:ok,
          %AlterCollectionSchemaResponse{
-           alter_status: %Status{code: 0},
-           index_status: %Status{code: 0}
+           alter_status: %Status{code: 0}
          }}
       end)
 

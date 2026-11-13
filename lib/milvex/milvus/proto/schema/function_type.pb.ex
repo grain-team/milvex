@@ -5,4 +5,6 @@ defmodule Milvex.Milvus.Proto.Schema.FunctionType do
   field :BM25, 1
   field :TextEmbedding, 2
   field :Rerank, 3
+  field :MinHash, 4
+  field :MolFingerprint, 5
 end

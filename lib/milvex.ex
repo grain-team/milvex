@@ -883,7 +883,7 @@ defmodule Milvex do
                rpc_opts
              ),
            {:ok, resp} <- RPC.with_status_check(response, "Query") do
-        {:ok, QueryResult.from_proto(resp)}
+        decode_result(resp, QueryResult)
       end
     end
   end
@@ -914,7 +914,9 @@ defmodule Milvex do
     - `:partition_names` - List of partition names to search
     - `:db_name` - Database name (default: "")
     - `:consistency_level` - Consistency level (default: `:Bounded`)
-    - `:highlight` - A `Milvex.Highlighter.t()` to enable search result highlighting
+    - `:highlight` - A `Milvex.Highlighter.t()` to enable search result highlighting.
+      Requires Milvus 2.6.8+; older servers return
+      `{:error, %Milvex.Errors.Invalid{code: :server_version_unsupported}}`
     - `:expr_params` - Template parameters map for the filter expression
     - `:offset` - Number of results to skip for pagination (limit + offset <= 16384)
     - `:group_by_field` - Scalar field name to group results by
@@ -986,6 +988,7 @@ defmodule Milvex do
     with :ok <- validate_offset_limit_cap(opts, :search),
          {:ok, vector_field} <- require_option(opts, :vector_field),
          {:ok, channel_fn, rpc_opts} <- resolve_channel(conn, opts),
+         :ok <- Milvex.Internal.require_highlight_support(conn, opts),
          {:ok, schema} <- resolve_schema(conn, collection, collection_name, opts),
          {:ok, field, is_nested} <- find_vector_field(schema, vector_field),
          {:ok, placeholder_bytes} <- build_ann_placeholder_group(vectors, field, is_nested) do
@@ -1013,7 +1016,7 @@ defmodule Milvex do
                rpc_opts
              ),
            {:ok, resp} <- RPC.with_status_check(response, "Search") do
-        {:ok, SearchResult.from_proto(resp)}
+        decode_result(resp, SearchResult)
       end
     end
   end
@@ -1191,9 +1194,15 @@ defmodule Milvex do
                rpc_opts
              ),
            {:ok, resp} <- RPC.with_status_check(response, "HybridSearch") do
-        {:ok, SearchResult.from_proto(resp)}
+        decode_result(resp, SearchResult)
       end
     end
+  end
+
+  defp decode_result(response, result_module) do
+    {:ok, result_module.from_proto(response)}
+  rescue
+    error in Invalid -> {:error, error}
   end
 
   defp build_search_requests(searches, schema) do
@@ -1577,7 +1586,9 @@ defmodule Milvex do
   end
 
   @doc """
-  Returns the Milvus server version (semantic version string).
+  Returns the raw Milvus server version string, without caching or config overrides.
+
+  See `server_version/2` for the parsed, cached, override-aware version.
 
   ## Returns
 
@@ -1601,6 +1612,24 @@ defmodule Milvex do
       end
     end
   end
+
+  @doc """
+  Returns the parsed Milvus server version.
+
+  Uses the connection's `:server_version` override when configured; otherwise detects
+  and caches the version per channel. Detection accepts RPC options such as `:timeout`.
+  An unparseable version returns an error with code `:server_version_unknown`.
+
+  See `get_version/2` for the raw, uncached server response.
+
+  ## Returns
+
+    - `{:ok, %Version{}}` on success
+    - `{:error, error}` on failure
+  """
+  @spec server_version(GenServer.server(), keyword()) ::
+          {:ok, Version.t()} | {:error, Error.t()}
+  def server_version(conn, opts \\ []), do: Milvex.ServerVersion.get(conn, opts)
 
   @doc """
   Returns the load state of a collection.
@@ -1725,9 +1754,9 @@ defmodule Milvex do
   end
 
   @doc """
-  Adds a single field to an existing collection (Milvus < 2.6 path).
+  Adds a single field to an existing collection (Milvus < 3.0 path).
 
-  Newer Milvus versions can use `alter_collection_schema/3` for batch
+  Milvus 3.0+ can use `alter_collection_schema/3` for batch
   add/drop. The field MUST be nullable or have a default; PK and vector
   fields cannot be added this way.
 
@@ -1769,7 +1798,10 @@ defmodule Milvex do
   end
 
   @doc """
-  Atomically adds and/or drops fields on a collection (Milvus 2.6+).
+  Atomically adds and/or drops fields on a collection (Milvus 3.0+).
+
+  Older servers do not implement this RPC and return
+  `{:error, %Milvex.Errors.Grpc{code: 12}}`.
 
   Either `:add_fields` (with optional `:add_functions`) or `:drop_fields`
   may be supplied — the request carries a oneof `action`, so a single call
@@ -1789,8 +1821,7 @@ defmodule Milvex do
       (default: false, logical add)
     - `:db_name` - Database name (default: "")
 
-  The response carries both an `alter_status` and an `index_status`; both must
-  be successful for this call to return `:ok`.
+  The response's `alter_status` must be successful for this call to return `:ok`.
 
   ## Returns
 
@@ -2245,7 +2276,7 @@ defmodule Milvex do
   defp build_drop_action(opts) do
     case Keyword.get(opts, :drop_fields, []) do
       [name] when is_binary(name) ->
-        request = %AlterCollectionSchemaDropRequest{field_identifier: {:field_name, name}}
+        request = %AlterCollectionSchemaDropRequest{identifier: {:field_name, name}}
         {:ok, wrap_action({:drop_request, request})}
 
       names when is_list(names) and length(names) > 1 ->
@@ -2269,11 +2300,8 @@ defmodule Milvex do
   end
 
   defp check_alter_collection_schema_status(%AlterCollectionSchemaResponse{
-         alter_status: alter_status,
-         index_status: index_status
+         alter_status: alter_status
        }) do
-    with :ok <- RPC.check_status(alter_status, "AlterCollectionSchema") do
-      RPC.check_status(index_status, "AlterCollectionSchema (index)")
-    end
+    RPC.check_status(alter_status, "AlterCollectionSchema")
   end
 end

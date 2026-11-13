@@ -226,6 +226,17 @@ defmodule Milvex.Internal do
   defp float_to_binary(f) when is_float(f), do: <<f::little-float-32>>
   defp float_to_binary(i) when is_integer(i), do: <<i * 1.0::little-float-32>>
 
+  # Milvus servers older than 2.6.8 silently drop the highlighter field and
+  # return empty highlights, so refuse instead.
+  @doc false
+  @spec require_highlight_support(GenServer.server(), keyword()) ::
+          :ok | {:error, Milvex.Error.t()}
+  def require_highlight_support(conn, opts) do
+    if opts[:highlight],
+      do: Milvex.ServerVersion.require(conn, ">= 2.6.8", "highlight", opts),
+      else: :ok
+  end
+
   @doc false
   @spec build_highlighter(MilvexHighlighter.t() | nil) :: ProtoHighlighter.t() | nil
   def build_highlighter(nil), do: nil

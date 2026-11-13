@@ -12,4 +12,6 @@ defmodule Milvex.Milvus.Proto.Schema.TemplateValue do
     type: Milvex.Milvus.Proto.Schema.TemplateArrayValue,
     json_name: "arrayVal",
     oneof: 0
+
+  field :bytes_val, 6, type: :bytes, json_name: "bytesVal", oneof: 0
 end

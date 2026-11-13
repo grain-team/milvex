@@ -14,6 +14,10 @@ defmodule Milvex.Config do
                        Zoi.string(description: "Database name to connect to")
                        |> Zoi.optional()
                        |> Zoi.default("default"),
+                     server_version:
+                       Zoi.string(description: "Override the detected Milvus server version")
+                       |> Zoi.optional()
+                       |> Zoi.default(nil),
                      user:
                        Zoi.string(description: "Username for authentication")
                        |> Zoi.optional(),
@@ -166,7 +170,18 @@ defmodule Milvex.Config do
   #{Zoi.metadata(@config_schema)[:moduledoc]}
   """
 
-  @type t :: unquote(Zoi.type_spec(@config_schema))
+  @type t ::
+          unquote(
+            @config_schema
+            |> Zoi.type_spec()
+            |> Macro.postwalk(fn
+              {{:required, _, [:server_version]} = key, _type} ->
+                {key, quote(do: Version.t() | nil)}
+
+              node ->
+                node
+            end)
+          )
 
   @doc """
   Returns the configuration schema.
@@ -213,6 +228,12 @@ defmodule Milvex.Config do
     |> parse()
   end
 
+  def parse(%{server_version: %Version{} = version} = config) do
+    with {:ok, validated} <- parse(Map.delete(config, :server_version)) do
+      {:ok, %{validated | server_version: version}}
+    end
+  end
+
   def parse(config) when is_map(config) do
     config =
       config
@@ -221,7 +242,7 @@ defmodule Milvex.Config do
 
     case Zoi.parse(@config_schema, config) do
       {:ok, validated} ->
-        {:ok, finalize_config(validated)}
+        finalize_config(validated)
 
       {:error, errors} ->
         {:error,
@@ -373,9 +394,28 @@ defmodule Milvex.Config do
   defp maybe_put_port(config, port), do: Map.put_new(config, :port, port)
 
   defp finalize_config(config) do
-    config
-    |> apply_ssl_defaults()
-    |> apply_default_port()
+    config =
+      config
+      |> apply_ssl_defaults()
+      |> apply_default_port()
+
+    case config.server_version do
+      nil ->
+        {:ok, config}
+
+      raw ->
+        case Milvex.ServerVersion.parse(raw) do
+          {:ok, version} ->
+            {:ok, %{config | server_version: version}}
+
+          :error ->
+            {:error,
+             Milvex.Errors.Invalid.exception(
+               field: "config",
+               message: "server_version must be a version string such as 3.0.3"
+             )}
+        end
+    end
   end
 
   defp apply_ssl_defaults(%{ssl: true, ssl_options: []} = config) do

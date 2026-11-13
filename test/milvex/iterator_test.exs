@@ -86,6 +86,36 @@ defmodule Milvex.IteratorTest do
     stub(RPC, :call, fn _ch, _stub, :describe_collection, _req, _opts -> @describe_response end)
   end
 
+  describe "search_stream/4 highlight version check" do
+    test "raises a version error on servers older than 2.6.8 without searching" do
+      {:ok, highlighter} = Milvex.Highlighter.lexical("text")
+      channel = %GRPC.Channel{host: "localhost", port: 19_530, ref: make_ref()}
+      on_exit(fn -> Milvex.ServerVersion.forget(channel) end)
+
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, channel, @config} end)
+
+      stub(RPC, :call, fn
+        _ch, _stub, :describe_collection, _req, _opts ->
+          @describe_response
+
+        _ch, _stub, :get_version, _req, _opts ->
+          {:ok,
+           %Milvex.Milvus.Proto.Milvus.GetVersionResponse{
+             status: %Status{code: 0},
+             version: "2.6.6"
+           }}
+      end)
+
+      assert_raise Invalid, ~r/requires Milvus >= 2.6.8/, fn ->
+        Milvex.search_stream(:conn, "test", [0.1, 0.2, 0.3, 0.4],
+          vector_field: "embedding",
+          highlight: highlighter
+        )
+        |> Enum.to_list()
+      end
+    end
+  end
+
   describe "search_stream/4 eager validation" do
     test "rejects multi-vector input at the wrapper" do
       stub_channel_and_describe()
@@ -560,7 +590,7 @@ defmodule Milvex.IteratorTest do
       params2 = Map.new(req2.query_params, &{&1.key, &1.value})
       assert params2["iterator"] == "True"
       assert params2["limit"] == "3"
-      assert params2["query_iter_last_pk"] == "3"
+      refute Map.has_key?(params2, "query_iter_last_pk")
       assert req2.expr == "(id >= 0) and id > 3"
     end
 

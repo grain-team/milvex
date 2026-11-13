@@ -52,4 +52,16 @@ defmodule Milvex.Milvus.Proto.Milvus.SearchRequest do
 
   field :namespace, 20, proto3_optional: true, type: :string
   field :highlighter, 21, type: Milvex.Milvus.Proto.Common.Highlighter
+
+  field :search_aggregation, 23,
+    type: Milvex.Milvus.Proto.Common.SearchAggregationSpec,
+    json_name: "searchAggregation"
+
+  field :function_chains, 24,
+    repeated: true,
+    type: Milvex.Milvus.Proto.Schema.FunctionChain,
+    json_name: "functionChains"
+
+  field :rls_principal, 25, type: :string, json_name: "rlsPrincipal"
+  field :skip_rls, 26, type: :bool, json_name: "skipRls"
 end

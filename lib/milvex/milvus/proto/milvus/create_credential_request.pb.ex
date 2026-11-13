@@ -10,4 +10,5 @@ defmodule Milvex.Milvus.Proto.Milvus.CreateCredentialRequest do
   field :password, 3, type: :string
   field :created_utc_timestamps, 4, type: :uint64, json_name: "createdUtcTimestamps"
   field :modified_utc_timestamps, 5, type: :uint64, json_name: "modifiedUtcTimestamps"
+  field :description, 6, proto3_optional: true, type: :string
 end

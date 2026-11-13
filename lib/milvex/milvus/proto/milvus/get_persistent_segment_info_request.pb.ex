@@ -4,4 +4,5 @@ defmodule Milvex.Milvus.Proto.Milvus.GetPersistentSegmentInfoRequest do
   field :base, 1, type: Milvex.Milvus.Proto.Common.MsgBase
   field :dbName, 2, type: :string
   field :collectionName, 3, type: :string
+  field :states, 4, repeated: true, type: Milvex.Milvus.Proto.Common.SegmentState, enum: true
 end

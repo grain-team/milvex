@@ -2,6 +2,10 @@ defmodule Milvex.Highlighter do
   @moduledoc """
   Builder functions for search result highlighting.
 
+  Highlighting requires Milvus 2.6.8 or later. On older servers, searches with
+  `:highlight` fail with a `:server_version_unsupported` error instead of
+  silently returning empty highlights.
+
   Two highlighting strategies are available:
 
   - **Lexical** - matches based on exact token overlap (BM25 search)

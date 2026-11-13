@@ -9,4 +9,6 @@ defmodule Milvex.Milvus.Proto.Milvus.PersistentSegmentInfo do
   field :level, 6, type: Milvex.Milvus.Proto.Common.SegmentLevel, enum: true
   field :is_sorted, 7, type: :bool, json_name: "isSorted"
   field :storage_version, 8, type: :int64, json_name: "storageVersion"
+  field :insert_channel, 9, type: :string, json_name: "insertChannel"
+  field :compaction_from, 10, repeated: true, type: :int64, json_name: "compactionFrom"
 end

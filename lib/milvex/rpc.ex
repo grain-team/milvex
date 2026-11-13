@@ -28,6 +28,7 @@ defmodule Milvex.RPC do
   alias Milvex.Errors.Grpc
   alias Milvex.Milvus.Proto.Common.Status
   alias Milvex.Retry
+  alias Milvex.ServerVersion
   alias Milvex.Telemetry
 
   @type rpc_result :: {:ok, struct()} | {:error, Error.t()}
@@ -94,6 +95,10 @@ defmodule Milvex.RPC do
         {:ok, response} ->
           status_code = extract_status_code(response)
           {{:ok, response}, Map.put(metadata, :status_code, status_code)}
+
+        {:error, %GRPC.RPCError{status: 12} = error} ->
+          result = {:error, unsupported_operation_error(channel, error, to_string(method))}
+          {result, Map.put(metadata, :status_code, error.status)}
 
         {:error, %GRPC.RPCError{} = error} ->
           result = {:error, grpc_error_to_error(error, to_string(method))}
@@ -189,7 +194,7 @@ defmodule Milvex.RPC do
 
   A `Milvex.Error.t()` representing the gRPC error.
   """
-  @spec grpc_error_to_error(GRPC.RPCError.t(), String.t()) :: Grpc.t()
+  @spec grpc_error_to_error(Exception.t(), String.t()) :: Grpc.t()
   def grpc_error_to_error(%GRPC.RPCError{status: status, message: message}, operation) do
     Grpc.exception(
       operation: operation,
@@ -244,6 +249,24 @@ defmodule Milvex.RPC do
 
   def with_status_check(response, _operation) when is_map(response) do
     {:ok, response}
+  end
+
+  defp unsupported_operation_error(channel, error, operation) do
+    version =
+      case ServerVersion.cached(channel) do
+        {:ok, version} -> version
+        status when status in [:miss, :unknown] -> nil
+      end
+
+    version_label = if version, do: to_string(version), else: "version unknown"
+
+    Grpc.exception(
+      code: 12,
+      operation: operation,
+      message:
+        "connected Milvus server (#{version_label}) does not support #{operation}; it may require a newer Milvus version",
+      details: %{grpc_status: 12, grpc_message: error.message, server_version: version}
+    )
   end
 
   defp connection_error(reason) do

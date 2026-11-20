@@ -28,7 +28,6 @@ defmodule Milvex.RPC do
   alias Milvex.Errors.Grpc
   alias Milvex.Milvus.Proto.Common.Status
   alias Milvex.Retry
-  alias Milvex.ServerVersion
   alias Milvex.Telemetry
 
   @type rpc_result :: {:ok, struct()} | {:error, Error.t()}
@@ -80,8 +79,9 @@ defmodule Milvex.RPC do
 
     Retry.with_retry(
       fn ->
-        with {:ok, channel, _config} <- channel_fn.() do
-          do_call(channel, stub_module, method, request, grpc_opts, telemetry_metadata)
+        with {:ok, channel, config} <- channel_fn.() do
+          version = Map.get(config, :server_version)
+          do_call({channel, version}, stub_module, method, request, grpc_opts, telemetry_metadata)
         end
       end,
       retry_opts,
@@ -89,7 +89,7 @@ defmodule Milvex.RPC do
     )
   end
 
-  defp do_call(channel, stub_module, method, request, opts, metadata) do
+  defp do_call({channel, version}, stub_module, method, request, opts, metadata) do
     Telemetry.rpc_span(metadata, fn ->
       case apply(stub_module, method, [channel, request, opts]) do
         {:ok, response} ->
@@ -97,7 +97,7 @@ defmodule Milvex.RPC do
           {{:ok, response}, Map.put(metadata, :status_code, status_code)}
 
         {:error, %GRPC.RPCError{status: 12} = error} ->
-          result = {:error, unsupported_operation_error(channel, error, to_string(method))}
+          result = {:error, unsupported_operation_error(version, error, to_string(method))}
           {result, Map.put(metadata, :status_code, error.status)}
 
         {:error, %GRPC.RPCError{} = error} ->
@@ -251,13 +251,7 @@ defmodule Milvex.RPC do
     {:ok, response}
   end
 
-  defp unsupported_operation_error(channel, error, operation) do
-    version =
-      case ServerVersion.cached(channel) do
-        {:ok, version} -> version
-        status when status in [:miss, :unknown] -> nil
-      end
-
+  defp unsupported_operation_error(version, error, operation) do
     version_label = if version, do: to_string(version), else: "version unknown"
 
     Grpc.exception(

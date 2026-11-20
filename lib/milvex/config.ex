@@ -444,6 +444,14 @@ defmodule Milvex.Config do
     :timeout
   ]
 
+  @doc false
+  @spec put_detected_version(t(), Version.t() | nil) :: t()
+  def put_detected_version(%{server_version: nil} = config, %Version{} = version) do
+    %{config | server_version: version}
+  end
+
+  def put_detected_version(config, _version), do: config
+
   @doc """
   Merges RPC-relevant defaults from a config map with user-provided opts.
 

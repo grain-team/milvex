@@ -66,14 +66,21 @@ defmodule Milvex.Connection do
   alias Milvex.Config
   alias Milvex.ConnectionPool
   alias Milvex.Errors
-  alias Milvex.ServerVersion
   alias Milvex.Telemetry
 
   # Delay before retrying a failed proactive recycle. Must stay well below the
   # server's ~1h connection age so we still beat the GOAWAY deadline.
   @recycle_retry_delay 30_000
 
-  defstruct [:config, :channel, :conn_monitor_ref, :registry, :draining, retry_count: 0]
+  defstruct [
+    :config,
+    :channel,
+    :conn_monitor_ref,
+    :registry,
+    :draining,
+    :server_version,
+    retry_count: 0
+  ]
 
   @typedoc "gRPC channel used by Milvex connections."
   @type channel :: %GRPC.Channel{}
@@ -84,6 +91,7 @@ defmodule Milvex.Connection do
           conn_monitor_ref: reference() | nil,
           registry: {:ets.tid(), pos_integer()} | nil,
           draining: {channel(), reference()} | nil,
+          server_version: {reference(), Version.t()} | nil,
           retry_count: non_neg_integer()
         }
 
@@ -128,6 +136,8 @@ defmodule Milvex.Connection do
 
   Returns `{:ok, channel, config}` if connected, or `{:error, error}` if not connected.
   The `config` map contains the full `Milvex.Config.t()` used by this connection.
+  Its `:server_version` is the configured override, or else the version detected
+  on this channel, or `nil` when neither is known yet.
   """
   @spec get_channel(GenServer.server(), keyword()) ::
           {:ok, channel(), Config.t()} | {:error, Milvex.Error.t()}
@@ -140,6 +150,18 @@ defmodule Milvex.Connection do
         timeout = Keyword.get(opts, :timeout, 5_000)
         GenStateMachine.call(conn, :get_channel, timeout)
     end
+  end
+
+  @doc false
+  @spec put_server_version(GenServer.server(), channel(), Version.t()) :: :ok
+  def put_server_version(conn, %GRPC.Channel{ref: ref}, %Version{} = version) do
+    worker =
+      case ConnectionPool.lookup(conn) do
+        {:ok, entry} -> ConnectionPool.worker_for(entry, ref)
+        :error -> conn
+      end
+
+    if worker, do: GenStateMachine.cast(worker, {:server_version, ref, version}), else: :ok
   end
 
   @doc """
@@ -267,6 +289,10 @@ defmodule Milvex.Connection do
     {:keep_state_and_data, [{:reply, from, {:ok, data.config}}]}
   end
 
+  def connecting(:cast, _msg, _data) do
+    :keep_state_and_data
+  end
+
   def connecting(:info, _msg, _data) do
     :keep_state_and_data
   end
@@ -279,7 +305,11 @@ defmodule Milvex.Connection do
   end
 
   def connected({:call, from}, :get_channel, data) do
-    {:keep_state_and_data, [{:reply, from, {:ok, data.channel, data.config}}]}
+    {:keep_state_and_data,
+     [
+       {:reply, from,
+        {:ok, data.channel, Config.put_detected_version(data.config, detected_version(data))}}
+     ]}
   end
 
   def connected({:call, from}, :connected?, _data) do
@@ -288,6 +318,19 @@ defmodule Milvex.Connection do
 
   def connected({:call, from}, :get_config, data) do
     {:keep_state_and_data, [{:reply, from, {:ok, data.config}}]}
+  end
+
+  # A caller detected the version on a channel it picked. Keep it only while
+  # that channel is still the current one; a replaced channel may reach a
+  # different server.
+  def connected(:cast, {:server_version, ref, version}, %{channel: %{ref: ref}} = data) do
+    data = %{data | server_version: {ref, version}}
+    publish_channel(data)
+    {:keep_state, data}
+  end
+
+  def connected(:cast, _msg, _data) do
+    :keep_state_and_data
   end
 
   def connected(:state_timeout, :recycle, data) do
@@ -327,7 +370,6 @@ defmodule Milvex.Connection do
   end
 
   def connected(:info, {:DOWN, ref, :process, _pid, reason}, %{conn_monitor_ref: ref} = data) do
-    ServerVersion.forget(data.channel)
     Telemetry.connection_disconnect(data.config.host, data.config.port, reason)
 
     {:next_state, :reconnecting,
@@ -382,6 +424,10 @@ defmodule Milvex.Connection do
     {:keep_state_and_data, [{:reply, from, {:ok, data.config}}]}
   end
 
+  def reconnecting(:cast, _msg, _data) do
+    :keep_state_and_data
+  end
+
   def reconnecting(:info, _msg, _data) do
     :keep_state_and_data
   end
@@ -408,13 +454,16 @@ defmodule Milvex.Connection do
   # callers can pick channels without going through any process.
   defp publish_channel(%{registry: nil}), do: :ok
 
-  defp publish_channel(%{registry: {table, index}, channel: channel}) do
-    :ets.insert(table, {index, self(), channel})
+  defp publish_channel(%{registry: {table, index}, channel: channel} = data) do
+    :ets.insert(table, {index, self(), channel, detected_version(data)})
     :ok
   rescue
     # Table owner (the pool) is shutting down.
     ArgumentError -> :ok
   end
+
+  defp detected_version(%{channel: %{ref: ref}, server_version: {ref, version}}), do: version
+  defp detected_version(_data), do: nil
 
   defp unpublish_channel(%{registry: nil}), do: :ok
 
@@ -623,8 +672,6 @@ defmodule Milvex.Connection do
 
   defp close_channel(%{adapter_payload: %{conn_pid: conn_pid}} = channel)
        when is_pid(conn_pid) do
-    ServerVersion.forget(channel)
-
     if Process.alive?(conn_pid) do
       GRPC.Stub.disconnect(channel)
     else
@@ -635,10 +682,7 @@ defmodule Milvex.Connection do
     :error, _ -> {:ok, channel}
   end
 
-  defp close_channel(channel) do
-    ServerVersion.forget(channel)
-    {:ok, channel}
-  end
+  defp close_channel(channel), do: {:ok, channel}
 end
 
 defimpl Inspect, for: Milvex.Connection do

@@ -90,8 +90,6 @@ defmodule Milvex.IteratorTest do
     test "raises a version error on servers older than 2.6.8 without searching" do
       {:ok, highlighter} = Milvex.Highlighter.lexical("text")
       channel = %GRPC.Channel{host: "localhost", port: 19_530, ref: make_ref()}
-      on_exit(fn -> Milvex.ServerVersion.forget(channel) end)
-
       stub(Connection, :get_channel, fn _conn, _opts -> {:ok, channel, @config} end)
 
       stub(RPC, :call, fn

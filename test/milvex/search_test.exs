@@ -93,8 +93,6 @@ defmodule Milvex.SearchTest do
     test "returns a version error instead of searching when the server is older than 2.6.8" do
       {:ok, highlighter} = Highlighter.lexical("text_field")
       channel = %GRPC.Channel{host: "localhost", port: 19_530, ref: make_ref()}
-      on_exit(fn -> Milvex.ServerVersion.forget(channel) end)
-
       stub(Connection, :get_channel, fn _conn, _opts -> {:ok, channel, @config} end)
 
       stub(RPC, :call, fn _channel, _stub, method, _request, _opts ->

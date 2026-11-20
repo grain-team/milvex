@@ -1,6 +1,10 @@
 defmodule Milvex.ServerVersion do
   @moduledoc """
-  Lazy server version detection, cached per established channel.
+  Lazy server version detection, remembered per established channel.
+
+  The version is detected on first use and handed to the connection that owns
+  the channel, which returns it in the config from
+  `Milvex.Connection.get_channel/2` until that channel is replaced.
 
   Groups B to F must call `require/4` before sending a 3.0-only field or RPC,
   for example `require(conn, ">= 3.0.0", "feature", opts)`. Unknown versions
@@ -14,54 +18,18 @@ defmodule Milvex.ServerVersion do
   alias Milvex.Milvus.Proto.Milvus.MilvusService
   alias Milvex.RPC
 
-  @table :milvex_server_versions
-
-  @doc "Creates the version cache, owned by the application process."
-  @spec create_table() :: :ok
-  def create_table do
-    :ets.new(@table, [:named_table, :public, :set, read_concurrency: true])
-    :ok
-  end
-
-  @doc "Returns the cached version without channel lookup or an RPC."
-  @spec cached(Connection.channel()) :: {:ok, Version.t()} | :unknown | :miss
-  def cached(%GRPC.Channel{ref: ref}) do
-    case :ets.lookup(@table, ref) do
-      [{^ref, %Version{} = version}] -> {:ok, version}
-      [{^ref, :unknown}] -> :unknown
-      [] -> :miss
-    end
-  end
-
-  @doc "Removes a dropped channel's cached version."
-  @spec forget(Connection.channel() | nil) :: :ok
-  def forget(nil), do: :ok
-
-  def forget(%GRPC.Channel{ref: ref}) do
-    :ets.delete(@table, ref)
-    :ok
-  end
-
   @doc "Returns the configured or detected version for the selected channel."
   @spec get(GenServer.server(), keyword()) :: {:ok, Version.t()} | {:error, Milvex.Error.t()}
   def get(conn, opts \\ []) do
     with {:ok, channel, config} <- Connection.get_channel(conn, opts) do
       case config.server_version do
         %Version{} = version -> {:ok, version}
-        nil -> get_cached(channel, config, opts)
+        nil -> detect(conn, channel, config, opts)
       end
     end
   end
 
-  defp get_cached(channel, config, opts) do
-    case cached(channel) do
-      {:ok, version} -> {:ok, version}
-      :unknown -> {:error, unknown_error(nil)}
-      :miss -> detect(channel, config, opts)
-    end
-  end
-
-  defp detect(channel, config, opts) do
+  defp detect(conn, channel, config, opts) do
     with {:ok, response} <-
            RPC.call(
              fn -> {:ok, channel, config} end,
@@ -70,16 +38,13 @@ defmodule Milvex.ServerVersion do
              %GetVersionRequest{},
              Config.merge_rpc_opts(config, opts)
            ),
-         {:ok, response} <- RPC.with_status_check(response, "GetVersion") do
-      case parse(response.version) do
-        {:ok, version} ->
-          :ets.insert(@table, {channel.ref, version})
-          {:ok, version}
-
-        :error ->
-          :ets.insert(@table, {channel.ref, :unknown})
-          {:error, unknown_error(nil)}
-      end
+         {:ok, response} <- RPC.with_status_check(response, "GetVersion"),
+         {:ok, version} <- parse(response.version) do
+      Connection.put_server_version(conn, channel, version)
+      {:ok, version}
+    else
+      :error -> {:error, unknown_error(nil)}
+      {:error, _} = error -> error
     end
   end
 

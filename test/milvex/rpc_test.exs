@@ -9,15 +9,13 @@ defmodule Milvex.RPCTest do
     setup do
       Mimic.verify_on_exit!()
       channel = %GRPC.Channel{ref: make_ref()}
-      on_exit(fn -> :ets.delete(:milvex_server_versions, channel.ref) end)
       %{channel: channel}
     end
 
-    test "includes the cached server version and does not retry UNIMPLEMENTED", %{
+    test "includes the channel's server version and does not retry UNIMPLEMENTED", %{
       channel: channel
     } do
       {:ok, version} = Version.parse("2.6.6")
-      :ets.insert(:milvex_server_versions, {channel.ref, version})
       request = %Milvex.Milvus.Proto.Milvus.SearchRequest{}
 
       Mimic.expect(GRPC.Stub, :call, 1, fn _, _, _, ^request, _ ->
@@ -26,7 +24,7 @@ defmodule Milvex.RPCTest do
 
       assert {:error, %Milvex.Errors.Grpc{} = error} =
                RPC.call(
-                 fn -> {:ok, channel, %{}} end,
+                 fn -> {:ok, channel, %{server_version: version}} end,
                  Milvex.Milvus.Proto.Milvus.MilvusService.Stub,
                  :search,
                  request
@@ -47,37 +45,28 @@ defmodule Milvex.RPCTest do
   end
 
   describe "call/5 without a known server version" do
-    for cache_state <- [:miss, :unknown] do
-      @cache_state cache_state
-      test "reports version unknown for #{@cache_state} without version detection" do
-        Mimic.verify_on_exit!()
-        channel = %GRPC.Channel{ref: make_ref()}
-        on_exit(fn -> :ets.delete(:milvex_server_versions, channel.ref) end)
+    test "reports version unknown without version detection" do
+      Mimic.verify_on_exit!()
+      channel = %GRPC.Channel{ref: make_ref()}
 
-        if @cache_state == :unknown do
-          :ets.insert(:milvex_server_versions, {channel.ref, :unknown})
-        end
+      request = %Milvex.Milvus.Proto.Milvus.SearchRequest{}
 
-        request = %Milvex.Milvus.Proto.Milvus.SearchRequest{}
+      Mimic.expect(GRPC.Stub, :call, 1, fn _, _, _, ^request, _ ->
+        {:error, %GRPC.RPCError{status: 12, message: nil}}
+      end)
 
-        Mimic.expect(GRPC.Stub, :call, 1, fn _, _, _, ^request, _ ->
-          {:error, %GRPC.RPCError{status: 12, message: nil}}
-        end)
+      assert {:error, %Milvex.Errors.Grpc{} = error} =
+               RPC.call(
+                 fn -> {:ok, channel, %{}} end,
+                 Milvex.Milvus.Proto.Milvus.MilvusService.Stub,
+                 :search,
+                 request
+               )
 
-        assert {:error, %Milvex.Errors.Grpc{} = error} =
-                 RPC.call(
-                   fn -> {:ok, channel, %{}} end,
-                   Milvex.Milvus.Proto.Milvus.MilvusService.Stub,
-                   :search,
-                   request
-                 )
+      assert error.message ==
+               "connected Milvus server (version unknown) does not support search; it may require a newer Milvus version"
 
-        assert error.message ==
-                 "connected Milvus server (version unknown) does not support search; it may require a newer Milvus version"
-
-        assert error.details == %{grpc_status: 12, grpc_message: nil, server_version: nil}
-        assert Milvex.ServerVersion.cached(channel) == @cache_state
-      end
+      assert error.details == %{grpc_status: 12, grpc_message: nil, server_version: nil}
     end
   end
 

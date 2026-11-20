@@ -11,11 +11,9 @@ defmodule Milvex.PublicServerVersionTest do
   setup :verify_on_exit!
 
   describe "server_version/2" do
-    test "returns the parsed, cached server version and forwards detection options" do
+    test "returns the parsed server version and forwards detection options" do
       channel = %GRPC.Channel{ref: make_ref(), host: "localhost", port: 19_530}
       config = Milvex.Config.defaults()
-      on_exit(fn -> Milvex.ServerVersion.forget(channel) end)
-
       stub(Connection, :get_channel, fn :fake_conn, _opts -> {:ok, channel, config} end)
 
       expect(RPC, :call, fn _, _, :get_version, request, opts ->
@@ -26,8 +24,6 @@ defmodule Milvex.PublicServerVersionTest do
 
       assert {:ok, %Version{major: 2, minor: 6, patch: 6}} =
                Milvex.server_version(:fake_conn, timeout: 7_000)
-
-      assert {:ok, %Version{major: 2, minor: 6, patch: 6}} = Milvex.server_version(:fake_conn)
     end
   end
 end

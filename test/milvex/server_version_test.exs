@@ -16,35 +16,27 @@ defmodule Milvex.ServerVersionTest do
     channel = %GRPC.Channel{ref: make_ref()}
     config = Milvex.Config.defaults()
     stub(Connection, :get_channel, fn :conn, _opts -> {:ok, channel, config} end)
-    on_exit(fn -> :ets.delete(:milvex_server_versions, channel.ref) end)
     %{channel: channel, config: config}
   end
 
-  test "detects once per channel and detects again after forgetting", %{
+  test "detects the version and reports it to the connection", %{
     channel: channel,
     config: config
   } do
-    assert :ets.whereis(:milvex_server_versions) != :undefined
-    assert :miss = ServerVersion.cached(channel)
-
-    expect(RPC, :call, 2, fn channel_fn,
-                             MilvusService.Stub,
-                             :get_version,
-                             %GetVersionRequest{},
-                             opts ->
+    expect(RPC, :call, fn channel_fn,
+                          MilvusService.Stub,
+                          :get_version,
+                          %GetVersionRequest{},
+                          opts ->
       assert {:ok, ^channel, ^config} = channel_fn.()
       assert opts[:timeout] == 7_000
       {:ok, %GetVersionResponse{status: %Status{code: 0}, version: "v3.0.3"}}
     end)
 
-    assert {:ok, version} = ServerVersion.get(:conn, timeout: 7_000)
-    assert version == Version.parse!("3.0.3")
-    assert {:ok, ^version} = ServerVersion.cached(channel)
-    assert {:ok, ^version} = ServerVersion.get(:conn)
-    assert :ok = ServerVersion.forget(channel)
-    assert :miss = ServerVersion.cached(channel)
+    version = Version.parse!("3.0.3")
+    expect(Connection, :put_server_version, fn :conn, ^channel, ^version -> :ok end)
+
     assert {:ok, ^version} = ServerVersion.get(:conn, timeout: 7_000)
-    assert :ok = ServerVersion.forget(nil)
   end
 
   test "detection uses the connection timeout and retry settings", %{
@@ -64,9 +56,8 @@ defmodule Milvex.ServerVersionTest do
     assert {:ok, %Version{major: 3}} = ServerVersion.get(:conn)
   end
 
-  test "config override wins even over a cached version", %{channel: channel, config: config} do
+  test "a version in the channel config skips detection", %{channel: channel, config: config} do
     version = Version.parse!("3.0.3")
-    :ets.insert(:milvex_server_versions, {channel.ref, Version.parse!("2.6.6")})
 
     stub(Connection, :get_channel, fn :conn, _opts ->
       {:ok, channel, Map.put(config, :server_version, version)}
@@ -76,8 +67,10 @@ defmodule Milvex.ServerVersionTest do
     assert {:ok, ^version} = ServerVersion.get(:conn)
   end
 
-  test "unknown versions are cached and refuse features", %{channel: channel} do
-    expect(RPC, :call, fn _, _, :get_version, _, _ ->
+  test "unparseable versions refuse features and are not remembered" do
+    reject(Connection, :put_server_version, 3)
+
+    expect(RPC, :call, 2, fn _, _, :get_version, _, _ ->
       {:ok, %GetVersionResponse{status: %Status{code: 0}, version: "garbage"}}
     end)
 
@@ -85,16 +78,24 @@ defmodule Milvex.ServerVersionTest do
              ServerVersion.get(:conn)
 
     assert error.message =~ "server_version: \"x.y.z\""
-    assert :unknown = ServerVersion.cached(channel)
 
     assert {:error, %Milvex.Errors.Invalid{code: :server_version_unknown, field: "feature"}} =
              ServerVersion.require(:conn, ">= 3.0.0", "feature", [])
   end
 
-  test "requirements accept supported versions and reject older servers", %{channel: channel} do
-    :ets.insert(:milvex_server_versions, {channel.ref, Version.parse!("3.0.3")})
+  test "requirements accept supported versions and reject older servers", %{
+    channel: channel,
+    config: config
+  } do
+    stub(Connection, :get_channel, fn :conn, _opts ->
+      {:ok, channel, %{config | server_version: Version.parse!("3.0.3")}}
+    end)
+
     assert :ok = ServerVersion.require(:conn, ">= 3.0.0", "feature", [])
-    :ets.insert(:milvex_server_versions, {channel.ref, Version.parse!("2.6.6")})
+
+    stub(Connection, :get_channel, fn :conn, _opts ->
+      {:ok, channel, %{config | server_version: Version.parse!("2.6.6")}}
+    end)
 
     assert {:error,
             %Milvex.Errors.Invalid{
@@ -104,11 +105,10 @@ defmodule Milvex.ServerVersionTest do
             }} = ServerVersion.require(:conn, ">= 3.0.0", "feature", [])
   end
 
-  test "failed detection is returned unchanged and retried", %{channel: channel} do
+  test "failed detection is returned unchanged and retried" do
     error = Milvex.Errors.Connection.exception(reason: :timeout)
     expect(RPC, :call, fn _, _, :get_version, _, _ -> {:error, error} end)
     assert {:error, ^error} = ServerVersion.get(:conn)
-    assert :miss = ServerVersion.cached(channel)
 
     expect(RPC, :call, fn _, _, :get_version, _, _ ->
       {:ok, %GetVersionResponse{status: %Status{code: 0}, version: "v2.6.6"}}
@@ -117,13 +117,14 @@ defmodule Milvex.ServerVersionTest do
     assert {:ok, %Version{major: 2, minor: 6, patch: 6}} = ServerVersion.get(:conn)
   end
 
-  test "Milvus status failures are not cached", %{channel: channel} do
+  test "Milvus status failures are not remembered" do
+    reject(Connection, :put_server_version, 3)
+
     expect(RPC, :call, fn _, _, :get_version, _, _ ->
       {:ok, %GetVersionResponse{status: %Status{code: 1, reason: "denied"}, version: "v3.0.3"}}
     end)
 
     assert {:error, %Milvex.Errors.Grpc{}} = ServerVersion.get(:conn)
-    assert :miss = ServerVersion.cached(channel)
   end
 
   test "channel lookup failures propagate without an RPC" do

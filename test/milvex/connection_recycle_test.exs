@@ -3,6 +3,9 @@ defmodule Milvex.ConnectionRecycleTest do
   use Mimic
 
   alias Milvex.Connection
+  alias Milvex.Milvus.Proto.Common.Status
+  alias Milvex.Milvus.Proto.Milvus.GetVersionRequest
+  alias Milvex.Milvus.Proto.Milvus.GetVersionResponse
 
   @moduletag :capture_log
 
@@ -220,83 +223,79 @@ defmodule Milvex.ConnectionRecycleTest do
     end
   end
 
-  describe "server version cache lifecycle" do
+  describe "server version detection" do
     setup do
       stub_successful_connect()
-
-      stub(GRPC.Stub, :connect, fn _address, _opts ->
-        conn_pid = spawn(fn -> Process.sleep(:infinity) end)
-        {:ok, %GRPC.Channel{ref: make_ref(), adapter_payload: %{conn_pid: conn_pid}}}
-      end)
-
       :ok
     end
 
-    test "disconnect forgets versions for monitored and unmonitored channels" do
-      conn_pid = spawn(fn -> Process.sleep(:infinity) end)
-
-      for payload <- [%{conn_pid: conn_pid}, nil] do
-        channel = %GRPC.Channel{ref: make_ref(), adapter_payload: payload}
-        stub(GRPC.Stub, :connect, fn _address, _opts -> {:ok, channel} end)
-        {:ok, conn} = Connection.start_link(host: "localhost")
-        eventually(fn -> assert {:ok, ^channel, _} = Connection.get_channel(conn) end)
-        :ets.insert(:milvex_server_versions, {channel.ref, :unknown})
-
-        assert :ok = Connection.disconnect(conn)
-        assert :ets.lookup(:milvex_server_versions, channel.ref) == []
-      end
-    end
-
-    test "monitored connection death forgets the dropped channel's version" do
-      {:ok, conn} = Connection.start_link(host: "localhost")
+    test "hands out the detected version and detects again after a reconnect" do
+      stub_versions(["v2.6.6", "v3.0.3"])
+      {:ok, conn} = Connection.start_link(host: "localhost", reconnect_base_delay: 100)
 
       channel =
         eventually(fn ->
-          assert {:ok, channel, _} = Connection.get_channel(conn)
+          assert {:ok, channel, %{server_version: version}} = Connection.get_channel(conn)
+          assert version == Version.parse!("2.6.6")
           channel
         end)
 
-      :ets.insert(:milvex_server_versions, {channel.ref, %Version{major: 3, minor: 0, patch: 3}})
       Process.exit(channel.adapter_payload.conn_pid, :kill)
 
-      eventually(fn -> assert :ets.lookup(:milvex_server_versions, channel.ref) == [] end)
-
       eventually(fn ->
-        assert {:ok, replacement, _} = Connection.get_channel(conn)
-        assert replacement.ref != channel.ref
+        assert Milvex.server_version(conn) == {:ok, Version.parse!("3.0.3")}
       end)
 
       Connection.disconnect(conn)
     end
 
-    test "recycle retains the cached version until the old channel finishes draining" do
-      {:ok, conn} =
+    test "pooled workers publish the version and refresh it on recycle" do
+      stub_versions(["v2.6.6", "v2.6.6", "v3.0.3", "v3.0.3"])
+
+      {:ok, pool} =
         Connection.start_link(
           host: "localhost",
-          channel_max_age: 3_000,
-          channel_max_age_jitter: 0.0,
-          timeout: 1_000
+          pool_size: 2,
+          channel_max_age: 1_000,
+          channel_max_age_jitter: 0.0
         )
 
-      initial =
-        eventually(fn ->
-          assert {:ok, channel, _} = Connection.get_channel(conn)
-          channel
-        end)
+      eventually(fn ->
+        assert Milvex.server_version(pool) == {:ok, Version.parse!("2.6.6")}
+      end)
 
-      version = %Version{major: 3, minor: 0, patch: 3}
-      :ets.insert(:milvex_server_versions, {initial.ref, version})
+      eventually(fn ->
+        assert Milvex.server_version(pool) == {:ok, Version.parse!("3.0.3")}
+        assert Milvex.server_version(pool) == {:ok, Version.parse!("3.0.3")}
+      end)
 
-      eventually(
-        fn ->
-          assert {:ok, current, _} = Connection.get_channel(conn)
-          assert current.ref != initial.ref
-        end,
-        200
-      )
+      Connection.disconnect(pool)
+    end
 
-      assert :ets.lookup(:milvex_server_versions, initial.ref) == [{initial.ref, version}]
-      eventually(fn -> assert :ets.lookup(:milvex_server_versions, initial.ref) == [] end, 200)
+    test "a failed detection still connects, with an unknown version" do
+      stub(GRPC.Stub, :call, fn _service, _rpc, _stream, %GetVersionRequest{}, _opts ->
+        {:error, %GRPC.RPCError{status: 14, message: "unavailable"}}
+      end)
+
+      {:ok, conn} = Connection.start_link(host: "localhost")
+
+      eventually(fn ->
+        assert {:ok, %GRPC.Channel{}, %{server_version: nil}} = Connection.get_channel(conn)
+      end)
+
+      assert {:error, %Milvex.Errors.Invalid{code: :server_version_unknown}} =
+               Milvex.server_version(conn)
+
+      Connection.disconnect(conn)
+    end
+
+    test "a configured version is handed out with the channel" do
+      {:ok, conn} = Connection.start_link(host: "localhost", server_version: "3.0.3")
+
+      eventually(fn ->
+        assert Milvex.server_version(conn) == {:ok, Version.parse!("3.0.3")}
+      end)
+
       Connection.disconnect(conn)
     end
   end
@@ -333,6 +332,21 @@ defmodule Milvex.ConnectionRecycleTest do
     |> stub(:disconnect, fn channel ->
       Process.exit(channel.adapter_payload.conn_pid, :kill)
       {:ok, channel}
+    end)
+  end
+
+  # Answers successive GetVersion RPCs with `versions`, repeating the last one.
+  defp stub_versions(versions) do
+    {:ok, agent} = Agent.start_link(fn -> versions end)
+
+    stub(GRPC.Stub, :call, fn _service, _rpc, _stream, %GetVersionRequest{}, _opts ->
+      version =
+        Agent.get_and_update(agent, fn
+          [version] -> {version, [version]}
+          [version | rest] -> {version, rest}
+        end)
+
+      {:ok, %GetVersionResponse{status: %Status{code: 0}, version: version}}
     end)
   end
 

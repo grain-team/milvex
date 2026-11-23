@@ -73,7 +73,15 @@ defmodule Milvex.Connection do
   # server's ~1h connection age so we still beat the GOAWAY deadline.
   @recycle_retry_delay 30_000
 
-  defstruct [:config, :channel, :conn_monitor_ref, :registry, :draining, retry_count: 0]
+  defstruct [
+    :config,
+    :channel,
+    :server_version,
+    :conn_monitor_ref,
+    :registry,
+    :draining,
+    retry_count: 0
+  ]
 
   @typedoc "gRPC channel used by Milvex connections."
   @type channel :: %GRPC.Channel{}
@@ -81,6 +89,7 @@ defmodule Milvex.Connection do
   @type t :: %__MODULE__{
           config: Config.t(),
           channel: channel() | nil,
+          server_version: Version.t() | nil,
           conn_monitor_ref: reference() | nil,
           registry: {:ets.tid(), pos_integer()} | nil,
           draining: {channel(), reference()} | nil,
@@ -127,7 +136,9 @@ defmodule Milvex.Connection do
   Gets the gRPC channel and connection config from the connection.
 
   Returns `{:ok, channel, config}` if connected, or `{:error, error}` if not connected.
-  The `config` map contains the full `Milvex.Config.t()` used by this connection.
+  The `config` map contains the full `Milvex.Config.t()` used by this connection,
+  with `:server_version` set to the version detected on this channel when it
+  was not configured.
   """
   @spec get_channel(GenServer.server(), keyword()) ::
           {:ok, channel(), Config.t()} | {:error, Milvex.Error.t()}
@@ -218,11 +229,9 @@ defmodule Milvex.Connection do
     Telemetry.connection_reconnect(data.config.host, data.config.port, data.retry_count, 0)
 
     case establish_connection(data.config) do
-      {:ok, channel, monitor_ref} ->
+      {:ok, channel, monitor_ref, version} ->
         Telemetry.connection_connect(data.config.host, data.config.port)
-
-        {:next_state, :connected,
-         %{data | channel: channel, conn_monitor_ref: monitor_ref, retry_count: 0}}
+        {:next_state, :connected, connected_data(data, channel, monitor_ref, version)}
 
       {:error, reason} ->
         delay = calculate_backoff_delay(data)
@@ -241,11 +250,9 @@ defmodule Milvex.Connection do
     Telemetry.connection_reconnect(data.config.host, data.config.port, data.retry_count, delay)
 
     case establish_connection(data.config) do
-      {:ok, channel, monitor_ref} ->
+      {:ok, channel, monitor_ref, version} ->
         Telemetry.connection_connect(data.config.host, data.config.port)
-
-        {:next_state, :connected,
-         %{data | channel: channel, conn_monitor_ref: monitor_ref, retry_count: 0}}
+        {:next_state, :connected, connected_data(data, channel, monitor_ref, version)}
 
       {:error, reason} ->
         Logger.warning("Connection retry failed: #{inspect(reason)}, retrying in #{delay}ms...")
@@ -279,7 +286,8 @@ defmodule Milvex.Connection do
   end
 
   def connected({:call, from}, :get_channel, data) do
-    {:keep_state_and_data, [{:reply, from, {:ok, data.channel, data.config}}]}
+    config = %{data.config | server_version: data.server_version}
+    {:keep_state_and_data, [{:reply, from, {:ok, data.channel, config}}]}
   end
 
   def connected({:call, from}, :connected?, _data) do
@@ -294,21 +302,19 @@ defmodule Milvex.Connection do
     data = clear_draining(data)
 
     case establish_connection(data.config) do
-      {:ok, new_channel, new_monitor_ref} ->
+      {:ok, new_channel, new_monitor_ref, version} ->
         Telemetry.connection_recycle(data.config.host, data.config.port)
 
-        old_channel = data.channel
         old_monitor_ref = data.conn_monitor_ref
 
-        publish_channel(%{data | channel: new_channel})
+        new_data = %{
+          connected_data(data, new_channel, new_monitor_ref, version)
+          | draining: {data.channel, old_monitor_ref}
+        }
 
-        {:keep_state,
-         %{
-           data
-           | channel: new_channel,
-             conn_monitor_ref: new_monitor_ref,
-             draining: {old_channel, old_monitor_ref}
-         },
+        publish_channel(new_data)
+
+        {:keep_state, new_data,
          [{{:timeout, :drain_old}, drain_grace(data.config), old_monitor_ref}] ++
            arm_recycle(data.config)}
 
@@ -327,7 +333,6 @@ defmodule Milvex.Connection do
   end
 
   def connected(:info, {:DOWN, ref, :process, _pid, reason}, %{conn_monitor_ref: ref} = data) do
-    ServerVersion.forget(data.channel)
     Telemetry.connection_disconnect(data.config.host, data.config.port, reason)
 
     {:next_state, :reconnecting,
@@ -404,12 +409,23 @@ defmodule Milvex.Connection do
 
   # --- Private helpers ---
 
-  # Pooled workers publish their channel to the pool's shared ETS table so
-  # callers can pick channels without going through any process.
+  defp connected_data(data, channel, monitor_ref, version) do
+    %{
+      data
+      | channel: channel,
+        conn_monitor_ref: monitor_ref,
+        server_version: version,
+        retry_count: 0
+    }
+  end
+
+  # Pooled workers publish their channel and its server version to the pool's
+  # shared ETS table so callers can pick channels without going through any
+  # process.
   defp publish_channel(%{registry: nil}), do: :ok
 
-  defp publish_channel(%{registry: {table, index}, channel: channel}) do
-    :ets.insert(table, {index, self(), channel})
+  defp publish_channel(%{registry: {table, index}} = data) do
+    :ets.insert(table, {index, self(), data.channel, data.server_version})
     :ok
   rescue
     # Table owner (the pool) is shutting down.
@@ -430,11 +446,9 @@ defmodule Milvex.Connection do
     Telemetry.connection_reconnect(data.config.host, data.config.port, data.retry_count, delay)
 
     case establish_connection(data.config) do
-      {:ok, channel, monitor_ref} ->
+      {:ok, channel, monitor_ref, version} ->
         Telemetry.connection_connect(data.config.host, data.config.port)
-
-        {:next_state, :connected,
-         %{data | channel: channel, conn_monitor_ref: monitor_ref, retry_count: 0}}
+        {:next_state, :connected, connected_data(data, channel, monitor_ref, version)}
 
       {:error, reason} ->
         Logger.warning("Reconnection failed: #{inspect(reason)}, retrying in #{delay}ms...")
@@ -473,7 +487,7 @@ defmodule Milvex.Connection do
     case GRPC.Stub.connect(address, opts) do
       {:ok, channel} ->
         monitor_ref = monitor_connection(channel)
-        {:ok, channel, monitor_ref}
+        {:ok, channel, monitor_ref, ServerVersion.detect(channel, config)}
 
       {:error, reason} ->
         {:error,
@@ -623,8 +637,6 @@ defmodule Milvex.Connection do
 
   defp close_channel(%{adapter_payload: %{conn_pid: conn_pid}} = channel)
        when is_pid(conn_pid) do
-    ServerVersion.forget(channel)
-
     if Process.alive?(conn_pid) do
       GRPC.Stub.disconnect(channel)
     else
@@ -635,10 +647,7 @@ defmodule Milvex.Connection do
     :error, _ -> {:ok, channel}
   end
 
-  defp close_channel(channel) do
-    ServerVersion.forget(channel)
-    {:ok, channel}
-  end
+  defp close_channel(channel), do: {:ok, channel}
 end
 
 defimpl Inspect, for: Milvex.Connection do

@@ -1,6 +1,9 @@
 defmodule Milvex.ServerVersion do
   @moduledoc """
-  Lazy server version detection, cached per established channel.
+  Server version detection and feature gating.
+
+  Each connection detects the version once per channel, right after it
+  connects, and hands it out with the channel as `config.server_version`.
 
   Groups B to F must call `require/4` before sending a 3.0-only field or RPC,
   for example `require(conn, ">= 3.0.0", "feature", opts)`. Unknown versions
@@ -8,77 +11,54 @@ defmodule Milvex.ServerVersion do
   when automatic detection is unavailable.
   """
 
+  require Logger
+
   alias Milvex.Config
   alias Milvex.Connection
   alias Milvex.Milvus.Proto.Milvus.GetVersionRequest
   alias Milvex.Milvus.Proto.Milvus.MilvusService
   alias Milvex.RPC
 
-  @table :milvex_server_versions
+  @detect_timeout 5_000
 
-  @doc "Creates the version cache, owned by the application process."
-  @spec create_table() :: :ok
-  def create_table do
-    :ets.new(@table, [:named_table, :public, :set, read_concurrency: true])
-    :ok
-  end
+  @doc """
+  Returns the configured version, or asks the server over `channel`.
 
-  @doc "Returns the cached version without channel lookup or an RPC."
-  @spec cached(Connection.channel()) :: {:ok, Version.t()} | :unknown | :miss
-  def cached(%GRPC.Channel{ref: ref}) do
-    case :ets.lookup(@table, ref) do
-      [{^ref, %Version{} = version}] -> {:ok, version}
-      [{^ref, :unknown}] -> :unknown
-      [] -> :miss
+  Runs inside the connection process, so it uses a short fixed timeout, does
+  not retry, and returns `nil` instead of failing the connect.
+  """
+  @spec detect(Connection.channel(), Config.t()) :: Version.t() | nil
+  def detect(_channel, %{server_version: %Version{} = version}), do: version
+
+  def detect(channel, _config) do
+    with {:ok, response} <-
+           MilvusService.Stub.get_version(channel, %GetVersionRequest{}, timeout: @detect_timeout),
+         {:ok, response} <- RPC.with_status_check(response, "GetVersion"),
+         {:ok, version} <- parse(response.version) do
+      version
+    else
+      reason -> undetected(reason)
     end
+  catch
+    kind, reason -> undetected({kind, reason})
   end
 
-  @doc "Removes a dropped channel's cached version."
-  @spec forget(Connection.channel() | nil) :: :ok
-  def forget(nil), do: :ok
+  defp undetected(reason) do
+    Logger.warning(
+      "Could not detect the Milvus server version: #{inspect(reason)}; " <>
+        "version-gated features are refused on this channel"
+    )
 
-  def forget(%GRPC.Channel{ref: ref}) do
-    :ets.delete(@table, ref)
-    :ok
+    nil
   end
 
   @doc "Returns the configured or detected version for the selected channel."
   @spec get(GenServer.server(), keyword()) :: {:ok, Version.t()} | {:error, Milvex.Error.t()}
   def get(conn, opts \\ []) do
-    with {:ok, channel, config} <- Connection.get_channel(conn, opts) do
+    with {:ok, _channel, config} <- Connection.get_channel(conn, opts) do
       case config.server_version do
         %Version{} = version -> {:ok, version}
-        nil -> get_cached(channel, config, opts)
-      end
-    end
-  end
-
-  defp get_cached(channel, config, opts) do
-    case cached(channel) do
-      {:ok, version} -> {:ok, version}
-      :unknown -> {:error, unknown_error(nil)}
-      :miss -> detect(channel, config, opts)
-    end
-  end
-
-  defp detect(channel, config, opts) do
-    with {:ok, response} <-
-           RPC.call(
-             fn -> {:ok, channel, config} end,
-             MilvusService.Stub,
-             :get_version,
-             %GetVersionRequest{},
-             Config.merge_rpc_opts(config, opts)
-           ),
-         {:ok, response} <- RPC.with_status_check(response, "GetVersion") do
-      case parse(response.version) do
-        {:ok, version} ->
-          :ets.insert(@table, {channel.ref, version})
-          {:ok, version}
-
-        :error ->
-          :ets.insert(@table, {channel.ref, :unknown})
-          {:error, unknown_error(nil)}
+        nil -> {:error, unknown_error(nil)}
       end
     end
   end

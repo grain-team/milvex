@@ -39,10 +39,10 @@ the error instead.
 
 **Compatibility guard codes:**
 - `:server_version_unsupported` - The connected server does not meet a feature's version requirement. The message includes the required and connected versions.
-- `:server_version_unknown` - The detected version could not be parsed. Set `server_version: "3.0.3"` in the connection config, using the actual server version, when automatic detection is unavailable.
+- `:server_version_unknown` - The connection could not detect the version when it connected, or could not parse it. Detection runs again on the next reconnect. Set `server_version: "3.0.3"` in the connection config, using the actual server version, when automatic detection is unavailable.
 
 For guarded features, `field` identifies the feature. `Milvex.server_version/2`
-returns the parsed, cached, override-aware version; `Milvex.get_version/2` returns
+returns the parsed, override-aware version; `Milvex.get_version/2` returns
 the raw server string.
 
 ### Milvex.Errors.Connection
@@ -100,9 +100,9 @@ gRPC UNIMPLEMENTED (code 12) reports:
 connected Milvus server (<version> | version unknown) does not support <op>; it may require a newer Milvus version
 ```
 
-The parenthesized value includes the server version only when it has already been
-detected and cached for that connection (for example, after `Milvex.server_version/2`
-or a version-gated call); otherwise it says `version unknown`. The error's `details`
+The parenthesized value is the server version the connection detected when it
+connected, or the configured `server_version`; when neither is available it says
+`version unknown`. The error's `details`
 contains `:grpc_status`, the original `:grpc_message`, and `:server_version`
 (`Version.t()` or `nil`).
 

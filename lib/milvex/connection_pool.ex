@@ -22,10 +22,10 @@ defmodule Milvex.ConnectionPool do
   ## Behavior
 
   Channel lookup never goes through the pool process. Each pooled connection
-  publishes its channel to a shared ETS table when it connects and removes it
-  when it disconnects. Callers pick a channel round-robin in their own
-  process using an `:atomics` counter, so `get_channel/2` is lock-free and
-  the pool process is never a bottleneck.
+  publishes its channel and server version to a shared ETS table when it
+  connects and removes them when it disconnects. Callers pick a channel
+  round-robin in their own process using an `:atomics` counter, so
+  `get_channel/2` is lock-free and the pool process is never a bottleneck.
 
   - `get_channel/2` picks connections round-robin. If the picked connection
     is not currently connected, the remaining connections are tried before
@@ -140,8 +140,8 @@ defmodule Milvex.ConnectionPool do
 
   defp live_channel(table, index, config) do
     case :ets.lookup(table, index) do
-      [{^index, worker, channel}] ->
-        if Process.alive?(worker), do: {:ok, channel, config}
+      [{^index, worker, channel, version}] ->
+        if Process.alive?(worker), do: {:ok, channel, %{config | server_version: version}}
 
       [] ->
         nil
@@ -153,7 +153,7 @@ defmodule Milvex.ConnectionPool do
   def any_connected?(%{table: table}) do
     table
     |> :ets.tab2list()
-    |> Enum.any?(fn {_index, worker, _channel} -> Process.alive?(worker) end)
+    |> Enum.any?(fn {_index, worker, _channel, _version} -> Process.alive?(worker) end)
   rescue
     ArgumentError -> false
   end

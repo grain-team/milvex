@@ -3,31 +3,23 @@ defmodule Milvex.PublicServerVersionTest do
   use Mimic
 
   alias Milvex.Connection
-  alias Milvex.Milvus.Proto.Common.Status
-  alias Milvex.Milvus.Proto.Milvus.GetVersionRequest
-  alias Milvex.Milvus.Proto.Milvus.GetVersionResponse
   alias Milvex.RPC
 
   setup :verify_on_exit!
 
   describe "server_version/2" do
-    test "returns the parsed, cached server version and forwards detection options" do
+    test "returns the version detected by the connection without an RPC" do
       channel = %GRPC.Channel{ref: make_ref(), host: "localhost", port: 19_530}
-      config = Milvex.Config.defaults()
-      on_exit(fn -> Milvex.ServerVersion.forget(channel) end)
+      config = %{Milvex.Config.defaults() | server_version: Version.parse!("2.6.6")}
 
-      stub(Connection, :get_channel, fn :fake_conn, _opts -> {:ok, channel, config} end)
-
-      expect(RPC, :call, fn _, _, :get_version, request, opts ->
-        assert %GetVersionRequest{} = request
-        assert opts[:timeout] == 7_000
-        {:ok, %GetVersionResponse{status: %Status{code: 0}, version: "v2.6.6"}}
+      expect(Connection, :get_channel, fn :fake_conn, [timeout: 7_000] ->
+        {:ok, channel, config}
       end)
+
+      reject(RPC, :call, 5)
 
       assert {:ok, %Version{major: 2, minor: 6, patch: 6}} =
                Milvex.server_version(:fake_conn, timeout: 7_000)
-
-      assert {:ok, %Version{major: 2, minor: 6, patch: 6}} = Milvex.server_version(:fake_conn)
     end
   end
 end

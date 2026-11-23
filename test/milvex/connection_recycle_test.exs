@@ -289,6 +289,43 @@ defmodule Milvex.ConnectionRecycleTest do
       Connection.disconnect(conn)
     end
 
+    test "a failed detection on recycle keeps the known version" do
+      {:ok, calls} = Agent.start_link(fn -> 0 end)
+
+      stub(GRPC.Stub, :call, fn _service, _rpc, _stream, %GetVersionRequest{}, _opts ->
+        if Agent.get_and_update(calls, &{&1, &1 + 1}) == 0 do
+          {:ok, %GetVersionResponse{status: %Status{code: 0}, version: "v2.6.6"}}
+        else
+          {:error, %GRPC.RPCError{status: 14, message: "unavailable"}}
+        end
+      end)
+
+      {:ok, conn} =
+        Connection.start_link(
+          host: "localhost",
+          channel_max_age: 1_000,
+          channel_max_age_jitter: 0.0
+        )
+
+      initial_pid =
+        eventually(fn ->
+          assert {:ok, channel, %{server_version: version}} = Connection.get_channel(conn)
+          assert version == Version.parse!("2.6.6")
+          channel.adapter_payload.conn_pid
+        end)
+
+      eventually(
+        fn ->
+          {:ok, channel, config} = Connection.get_channel(conn)
+          assert channel.adapter_payload.conn_pid != initial_pid
+          assert config.server_version == Version.parse!("2.6.6")
+        end,
+        200
+      )
+
+      Connection.disconnect(conn)
+    end
+
     test "a configured version is handed out with the channel" do
       {:ok, conn} = Connection.start_link(host: "localhost", server_version: "3.0.3")
 

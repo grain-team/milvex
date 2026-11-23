@@ -15,7 +15,6 @@ defmodule Milvex.SearchTest do
   alias Milvex.Milvus.Proto.Common.KeyValuePair
   alias Milvex.Milvus.Proto.Common.Status
   alias Milvex.Milvus.Proto.Milvus.DescribeCollectionResponse
-  alias Milvex.Milvus.Proto.Milvus.GetVersionResponse
   alias Milvex.Milvus.Proto.Milvus.SearchResults
   alias Milvex.Milvus.Proto.Schema.CollectionSchema
   alias Milvex.Milvus.Proto.Schema.FieldSchema
@@ -92,19 +91,10 @@ defmodule Milvex.SearchTest do
   describe "search/4 with highlight option" do
     test "returns a version error instead of searching when the server is older than 2.6.8" do
       {:ok, highlighter} = Highlighter.lexical("text_field")
-      channel = %GRPC.Channel{host: "localhost", port: 19_530, ref: make_ref()}
-      on_exit(fn -> Milvex.ServerVersion.forget(channel) end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel, config("2.6.6")} end)
 
-      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, channel, @config} end)
-
-      stub(RPC, :call, fn _channel, _stub, method, _request, _opts ->
-        case method do
-          :describe_collection ->
-            @describe_response
-
-          :get_version ->
-            {:ok, %GetVersionResponse{status: %Status{code: 0}, version: "2.6.6"}}
-        end
+      stub(RPC, :call, fn _channel, _stub, :describe_collection, _request, _opts ->
+        @describe_response
       end)
 
       assert {:error,
@@ -119,7 +109,7 @@ defmodule Milvex.SearchTest do
       {:ok, highlighter} = Highlighter.lexical("text_field")
       test_pid = self()
 
-      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel, @config} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel, config("2.6.8")} end)
 
       stub(RPC, :call, fn _channel, _stub, method, request, _opts ->
         case method do
@@ -129,9 +119,6 @@ defmodule Milvex.SearchTest do
           :search ->
             send(test_pid, {:search_request, request})
             @search_response
-
-          :get_version ->
-            {:ok, %GetVersionResponse{status: %Status{code: 0}, version: "2.6.8"}}
         end
       end)
 
@@ -180,7 +167,7 @@ defmodule Milvex.SearchTest do
       {:ok, highlighter} = Highlighter.lexical("text_field", pre_tag: "<em>", post_tag: "</em>")
       test_pid = self()
 
-      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel, @config} end)
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel, config("2.6.8")} end)
 
       stub(RPC, :call, fn _channel, _stub, method, request, _opts ->
         case method do
@@ -190,9 +177,6 @@ defmodule Milvex.SearchTest do
           :search ->
             send(test_pid, {:search_request, request})
             @search_response
-
-          :get_version ->
-            {:ok, %GetVersionResponse{status: %Status{code: 0}, version: "2.6.8"}}
         end
       end)
 
@@ -399,4 +383,6 @@ defmodule Milvex.SearchTest do
                )
     end
   end
+
+  defp config(version), do: %{@config | server_version: Version.parse!(version)}
 end

@@ -89,21 +89,11 @@ defmodule Milvex.IteratorTest do
   describe "search_stream/4 highlight version check" do
     test "raises a version error on servers older than 2.6.8 without searching" do
       {:ok, highlighter} = Milvex.Highlighter.lexical("text")
-      channel = %GRPC.Channel{host: "localhost", port: 19_530, ref: make_ref()}
-      on_exit(fn -> Milvex.ServerVersion.forget(channel) end)
+      config = %{@config | server_version: Version.parse!("2.6.6")}
+      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, @channel, config} end)
 
-      stub(Connection, :get_channel, fn _conn, _opts -> {:ok, channel, @config} end)
-
-      stub(RPC, :call, fn
-        _ch, _stub, :describe_collection, _req, _opts ->
-          @describe_response
-
-        _ch, _stub, :get_version, _req, _opts ->
-          {:ok,
-           %Milvex.Milvus.Proto.Milvus.GetVersionResponse{
-             status: %Status{code: 0},
-             version: "2.6.6"
-           }}
+      stub(RPC, :call, fn _ch, _stub, :describe_collection, _req, _opts ->
+        @describe_response
       end)
 
       assert_raise Invalid, ~r/requires Milvus >= 2.6.8/, fn ->

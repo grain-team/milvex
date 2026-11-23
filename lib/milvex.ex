@@ -1616,11 +1616,13 @@ defmodule Milvex do
   @doc """
   Returns the parsed Milvus server version.
 
-  Uses the connection's `:server_version` override when configured; otherwise detects
-  and caches the version per channel. Detection accepts RPC options such as `:timeout`.
-  An unparseable version returns an error with code `:server_version_unknown`.
+  Uses the connection's `:server_version` override when configured; otherwise returns
+  the version the connection detected when it established the current channel. No RPC
+  is sent, and `opts` only carries the `:timeout` for reaching the connection process.
+  When detection failed or the version could not be parsed, returns an error with code
+  `:server_version_unknown` until the connection reconnects.
 
-  See `get_version/2` for the raw, uncached server response.
+  See `get_version/2` for the raw server response.
 
   ## Returns
 

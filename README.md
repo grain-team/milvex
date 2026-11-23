@@ -151,11 +151,11 @@ Milvex.Connection.start_link(
 ### Milvus 2.6 and 3.0 compatibility
 
 Milvex supports Milvus 2.6 and 3.0. `Milvex.server_version(conn)` returns
-`{:ok, %Version{}}`, using the configured override or detection cached per channel.
-`Milvex.get_version(conn)` returns the raw, uncached server string instead.
+`{:ok, %Version{}}`, using the configured override or the version each connection
+detects when it connects. `Milvex.get_version(conn)` returns the raw server string instead.
 
 Version-guarded features return `:server_version_unsupported` on older servers or
-`:server_version_unknown` when detection cannot parse the version. Set the optional
+`:server_version_unknown` when detection failed or could not parse the version. Set the optional
 `server_version` connection option to the actual server version when detection is
 unavailable. Unsupported RPCs return a gRPC UNIMPLEMENTED error (code 12) explaining
 that the operation may require a newer Milvus version. See the

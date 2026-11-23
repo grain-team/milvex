@@ -308,7 +308,7 @@ defmodule Milvex.Connection do
         old_monitor_ref = data.conn_monitor_ref
 
         new_data = %{
-          connected_data(data, new_channel, new_monitor_ref, version)
+          connected_data(data, new_channel, new_monitor_ref, version || data.server_version)
           | draining: {data.channel, old_monitor_ref}
         }
 

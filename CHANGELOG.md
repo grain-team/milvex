@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.15.0](https://github.com/grain-team/milvex/compare/v0.14.2...v0.15.0) (2026-11-24)
+
+
+### Features
+
+* add cached server version detection with server_version override ([47e4908](https://github.com/grain-team/milvex/commit/47e4908c5e5377d37673eb70c8deeee1cb56a606))
+* add Milvex.server_version/2 and document Milvus 2.6/3.0 compatibility ([5fd650a](https://github.com/grain-team/milvex/commit/5fd650a6e3870e56625b9ea06458d6afc305b957))
+* **connection:** forget cached server version when a channel is dropped ([c418e21](https://github.com/grain-team/milvex/commit/c418e21dbb13f3df6cd0b86542eca851f2391870))
+* **rpc:** explain UNIMPLEMENTED responses as unsupported by the connected server ([1c9f91d](https://github.com/grain-team/milvex/commit/1c9f91d6dfa2dd3fe7920c70502a1bde44f09344))
+* Updated milvus-proto to Milvus 3.0 (v3.0.4) ([a7d3e86](https://github.com/grain-team/milvex/commit/a7d3e8630f4ac54280111a98468f886e2cfd6252))
+
+
+### Bug Fixes
+
+* address final review findings for server version and integration tests ([279b04a](https://github.com/grain-team/milvex/commit/279b04a8f3162277fc272044bfcad81e981bf68a))
+* **connection:** keep the known server version when detection fails on recycle ([ee5ab49](https://github.com/grain-team/milvex/commit/ee5ab49cb63f7d014c87ce065619a59ac6f1ba44))
+* **data:** decode geometry, honor valid_data nulls, and fail loudly on unsupported column types ([743976a](https://github.com/grain-team/milvex/commit/743976a547308914bafe9917616e311b199cf92e))
+* **iterator:** stop sending query_iter_last_pk so query_stream works on Milvus 3 ([6ca9aa3](https://github.com/grain-team/milvex/commit/6ca9aa35ebe7432afbf38599ff65ad5f50549413))
+* return decode errors from query, search and hybrid_search instead of empty results ([6bde0a8](https://github.com/grain-team/milvex/commit/6bde0a81cd77da532c86b6ba2dd783c2577a0177))
+* **schema:** report geometry fields as :geometry when describing collections ([eb681f3](https://github.com/grain-team/milvex/commit/eb681f310e0c9832bd2337c92ad02d5a9c29e1d6))
+* **search:** refuse highlight on Milvus servers older than 2.6.8 ([ad2599f](https://github.com/grain-team/milvex/commit/ad2599ff337feff11d1cd180fb8b6c27bc46ef48))
+
 ## [0.14.2](https://github.com/grain-team/milvex/compare/v0.14.1...v0.14.2) (2026-08-17)
 
 
